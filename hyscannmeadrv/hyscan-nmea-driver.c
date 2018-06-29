@@ -208,7 +208,7 @@ hyscan_nmea_driver_set_property (GObject      *object,
     {
     case PROP_URI:
       {
-        priv->uri = g_ascii_strup (g_value_get_string (value), -1);
+        priv->uri = g_ascii_strdown (g_value_get_string (value), -1);
         priv->connect_schema = hyscan_nmea_driver_get_connect_schema (priv->uri);
       }
       break;
@@ -366,17 +366,17 @@ hyscan_nmea_driver_create_schema (const gchar *name,
   sensor = hyscan_sensor_schema_new (builder);
 
   /* Описание датчика. */
-  hyscan_sensor_schema_add_sensor (sensor, name, dev_id, _ ("NMEA sensor"));
+  hyscan_sensor_schema_add_sensor (sensor, name, dev_id, _("NMEA sensor"));
 
   /* Признак доступности датчика. */
   key_id = g_strdup_printf ("/state/%s/enable", dev_id);
-  hyscan_data_schema_builder_key_boolean_create (builder, key_id, _ ("Enable"), NULL, FALSE);
+  hyscan_data_schema_builder_key_boolean_create (builder, key_id, _("Enable"), NULL, FALSE);
   hyscan_data_schema_builder_key_set_access (builder, key_id, HYSCAN_DATA_SCHEMA_ACCESS_READONLY);
   g_free (key_id);
 
   /* Статус работы датчика. */
   key_id = g_strdup_printf ("/state/%s/status", dev_id);
-  hyscan_data_schema_builder_key_string_create (builder, key_id, _ ("Status"), NULL, "error");
+  hyscan_data_schema_builder_key_string_create (builder, key_id, _("Status"), NULL, "error");
   hyscan_data_schema_builder_key_set_access (builder, key_id, HYSCAN_DATA_SCHEMA_ACCESS_READONLY);
   g_free (key_id);
 
@@ -470,7 +470,7 @@ hyscan_nmea_driver_starter (gpointer user_data)
               address = g_strdup ("loopback");
             }
 
-          /* Ищем выбранный адрес под его идентификатору. */
+          /* Ищем выбранный адрес по его идентификатору. */
           else
             {
               gchar **addresses = hyscan_nmea_udp_list_addresses ();
@@ -582,6 +582,7 @@ hyscan_nmea_driver_scanner (gpointer user_data)
       g_usleep (100000);
     }
 
+  g_list_free_full (uarts, g_object_unref);
   g_timer_destroy (timer);
 
   return NULL;
@@ -636,17 +637,17 @@ hyscan_nmea_driver_check_data (HyScanNmeaDriver *driver)
       if (cur_status == NMEA_DRIVER_STATUS_OK)
         {
           g_snprintf (message, sizeof (message),
-                      _ ("The sensor is fully operational."));
+                      _("The sensor is fully operational."));
         }
       else if (cur_status == NMEA_DRIVER_STATUS_WARNING)
         {
           g_snprintf (message, sizeof (message),
-                      _ ("Temporary error while receiving data."));
+                      _("Temporary error while receiving data."));
         }
       else
         {
           g_snprintf (message, sizeof (message),
-                      _ ("An error occurred while receiving data%s"),
+                      _("An error occurred while receiving data%s"),
                       io_error ? ", port disconnected." : ".");
         }
 
@@ -700,7 +701,7 @@ hyscan_nmea_driver_emmiter (HyScanNmeaReceiver *receiver,
                             HyScanNmeaDriver   *driver)
 {
   HyScanNmeaDriverPrivate *priv = driver->priv;
-  gchar **nmea;
+  gchar **sentences;
   guint i;
 
   /* Сбрасываем таймер таймаута данных. */
@@ -710,7 +711,7 @@ hyscan_nmea_driver_emmiter (HyScanNmeaReceiver *receiver,
   g_atomic_int_set (&priv->status, NMEA_DRIVER_STATUS_OK);
 
   /* Приём данных отключен. */
-  if (!priv->enable)
+  if (!g_atomic_int_get (&priv->enable))
     return;
 
   /* Отправка всех NMEA данных. */
@@ -718,27 +719,30 @@ hyscan_nmea_driver_emmiter (HyScanNmeaReceiver *receiver,
   g_signal_emit_by_name (driver, "sensor-data", priv->name, HYSCAN_SOURCE_NMEA_ANY, time, priv->buffer);
 
   /* Отправка RMC, GGA и DPT. */
-  nmea = g_strsplit_set (data, "\r\n", size);
-  for (i = 0; (nmea != NULL) && (nmea[i] != NULL); i++)
+  sentences = g_strsplit_set (data, "\r\n", size);
+  for (i = 0; (sentences != NULL) && (sentences[i] != NULL); i++)
     {
-      if (g_str_has_prefix (nmea[i], "$GPRMC"))
+      HyScanSourceType sentence_type = HYSCAN_SOURCE_INVALID;
+      gsize sentence_length = strlen (sentences[i]);
+
+      if (sentence_length < sizeof ("$XXXXX*CC"))
+        continue;
+
+      if (g_str_has_prefix (sentences[i] + 3, "RMC"))
+        sentence_type = HYSCAN_SOURCE_NMEA_RMC;
+      else if (g_str_has_prefix (sentences[i] + 3, "GGA"))
+        sentence_type = HYSCAN_SOURCE_NMEA_GGA;
+      else if (g_str_has_prefix (sentences[i] + 3, "DPT"))
+        sentence_type = HYSCAN_SOURCE_NMEA_DPT;
+
+      if (sentence_type != HYSCAN_SOURCE_INVALID)
         {
-          hyscan_buffer_wrap_data (priv->buffer, HYSCAN_DATA_STRING, nmea[i], strlen (nmea[i]) + 1);
-          g_signal_emit_by_name (driver, "sensor-data", priv->name, HYSCAN_SOURCE_NMEA_RMC, time, priv->buffer);
-        }
-      else if (g_str_has_prefix (nmea[i], "$GPGGA"))
-        {
-          hyscan_buffer_wrap_data (priv->buffer, HYSCAN_DATA_STRING, nmea[i], strlen (nmea[i]) + 1);
-          g_signal_emit_by_name (driver, "sensor-data", priv->name, HYSCAN_SOURCE_NMEA_GGA, time, priv->buffer);
-        }
-      else if (g_str_has_prefix (nmea[i], "$GPDPT"))
-        {
-          hyscan_buffer_wrap_data (priv->buffer, HYSCAN_DATA_STRING, nmea[i], strlen (nmea[i]) + 1);
-          g_signal_emit_by_name (driver, "sensor-data", priv->name, HYSCAN_SOURCE_NMEA_DPT, time, priv->buffer);
+          hyscan_buffer_wrap_data (priv->buffer, HYSCAN_DATA_STRING, sentences[i], sentence_length + 1);
+          g_signal_emit_by_name (driver, "sensor-data", priv->name, sentence_type, time, priv->buffer);
         }
     }
 
-  g_strfreev (nmea);
+  g_strfreev (sentences);
 }
 
 static HyScanDataSchema *
@@ -774,25 +778,17 @@ hyscan_nmea_driver_param_get (HyScanParam      *param,
 
       key_id = params[i] + strlen (priv->state_prefix);
 
-      /* Параметр enable. */
-      if (g_strcmp0 (key_id, "enable") == 0)
-        {
-          gboolean enable = (priv->transport != NULL) ? TRUE : FALSE;
-
-          hyscan_param_list_set_boolean (list, params[i], enable);
-        }
-
       /* Параметр status. */
-      else if (g_strcmp0 (key_id, "status") == 0)
+      if (g_strcmp0 (key_id, "status") == 0)
         {
           const gchar *status;
 
           if (g_atomic_int_get (&priv->status) == NMEA_DRIVER_STATUS_OK)
-            status = "ok";
+            status = HYSCAN_DEVICE_SCHEMA_STATUS_OK;
           else if (g_atomic_int_get (&priv->status) == NMEA_DRIVER_STATUS_WARNING)
-            status = "warning";
+            status = HYSCAN_DEVICE_SCHEMA_STATUS_WARNING;
           else
-            status = "error";
+            status = HYSCAN_DEVICE_SCHEMA_STATUS_ERROR;
 
           hyscan_param_list_set_string (list, params[i], status);
         }
@@ -865,18 +861,18 @@ hyscan_nmea_driver_get_connect_schema (const gchar *uri)
   gchar *data;
   gchar *URI;
 
-  URI = g_ascii_strup (uri, -1);
+  URI = g_ascii_strdown (uri, -1);
 
   builder = hyscan_data_schema_builder_new ("params");
 
   /* Таймауты приёма данных. */
   hyscan_data_schema_builder_key_double_create (builder, TIMEOUT_WARNING_PARAM,
-                                                _ ("Timeout before warning"), NULL, 5.0);
+                                                _("Timeout before warning"), NULL, 5.0);
   hyscan_data_schema_builder_key_double_range  (builder, TIMEOUT_WARNING_PARAM,
                                                 0.0, 30.0, 1.0);
 
   hyscan_data_schema_builder_key_double_create (builder, TIMEOUT_ERROR_PARAM,
-                                                _ ("Timeout before error"), NULL, 30.0);
+                                                _("Timeout before error"), NULL, 30.0);
   hyscan_data_schema_builder_key_double_range  (builder, TIMEOUT_ERROR_PARAM,
                                                 30.0, 60.0, 1.0);
 
@@ -889,7 +885,7 @@ hyscan_nmea_driver_get_connect_schema (const gchar *uri)
       hyscan_data_schema_builder_enum_create (builder, "uart-port");
 
       hyscan_data_schema_builder_enum_value_create (builder, "uart-port", 0,
-                                                    _ ("Auto select"), NULL);
+                                                    _("Auto select"), NULL);
 
       device = devices = hyscan_nmea_uart_list_devices ();
       while (device != NULL)
@@ -905,29 +901,29 @@ hyscan_nmea_driver_get_connect_schema (const gchar *uri)
       g_list_free_full (devices, (GDestroyNotify)hyscan_nmea_uart_device_free);
 
       hyscan_data_schema_builder_key_enum_create (builder, UART_PORT_PARAM,
-                                                  _ ("Port"), NULL,
+                                                  _("Port"), NULL,
                                                   "uart-port", 0);
 
       /* Режимы работы UART порта. */
       hyscan_data_schema_builder_enum_create (builder, "uart-mode");
 
       hyscan_data_schema_builder_enum_value_create (builder, "uart-mode", HYSCAN_NMEA_UART_MODE_AUTO,
-                                                    _ ("Auto select"), NULL);
+                                                    _("Auto select"), NULL);
       hyscan_data_schema_builder_enum_value_create (builder, "uart-mode", HYSCAN_NMEA_UART_MODE_4800_8N1,
-                                                    _ ("4800 8N1"), NULL);
+                                                    _("4800 8N1"), NULL);
       hyscan_data_schema_builder_enum_value_create (builder, "uart-mode", HYSCAN_NMEA_UART_MODE_9600_8N1,
-                                                    _ ("9600 8N1"), NULL);
+                                                    _("9600 8N1"), NULL);
       hyscan_data_schema_builder_enum_value_create (builder, "uart-mode", HYSCAN_NMEA_UART_MODE_19200_8N1,
-                                                    _ ("19200 8N1"), NULL);
+                                                    _("19200 8N1"), NULL);
       hyscan_data_schema_builder_enum_value_create (builder, "uart-mode", HYSCAN_NMEA_UART_MODE_38400_8N1,
-                                                    _ ("38400 8N1"), NULL);
+                                                    _("38400 8N1"), NULL);
       hyscan_data_schema_builder_enum_value_create (builder, "uart-mode", HYSCAN_NMEA_UART_MODE_57600_8N1,
-                                                    _ ("57600 8N1"), NULL);
+                                                    _("57600 8N1"), NULL);
       hyscan_data_schema_builder_enum_value_create (builder, "uart-mode", HYSCAN_NMEA_UART_MODE_115200_8N1,
-                                                    _ ("115200 8N1"), NULL);
+                                                    _("115200 8N1"), NULL);
 
       hyscan_data_schema_builder_key_enum_create (builder, UART_MODE_PARAM,
-                                                  _ ("Mode"), NULL,
+                                                  _("Mode"), NULL,
                                                   "uart-mode", HYSCAN_NMEA_UART_MODE_AUTO);
     }
 
@@ -941,7 +937,7 @@ hyscan_nmea_driver_get_connect_schema (const gchar *uri)
       hyscan_data_schema_builder_enum_create (builder, "udp-address");
 
       hyscan_data_schema_builder_enum_value_create (builder, "udp-address", 0,
-                                                    _ ("All addresses"), NULL);
+                                                    _("All addresses"), NULL);
 
       addresses = hyscan_nmea_udp_list_addresses ();
       for (i = 0; (addresses != NULL) && (addresses[i] != NULL); i++)
@@ -954,12 +950,12 @@ hyscan_nmea_driver_get_connect_schema (const gchar *uri)
       g_strfreev (addresses);
 
       hyscan_data_schema_builder_key_enum_create (builder, UDP_ADDRESS_PARAM,
-                                                  _ ("Address"), NULL,
+                                                  _("Address"), NULL,
                                                   "udp-address", 0);
 
       /* UDP/IP порт. */
       hyscan_data_schema_builder_key_integer_create (builder, UDP_PORT_PARAM,
-                                                     _ ("UDP port"), NULL, 10000);
+                                                     _("UDP port"), NULL, 10000);
       hyscan_data_schema_builder_key_integer_range  (builder, UDP_PORT_PARAM,
                                                      1024, 65535, 1);
     }

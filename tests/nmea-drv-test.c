@@ -53,34 +53,26 @@ status_check (gpointer data)
   HyScanParamList *list = hyscan_param_list_new ();
 
   gchar **keys = hyscan_data_schema_list_keys (schema);
-  const gchar *enable_id = NULL;
   const gchar *status_id = NULL;
 
   guint i;
 
   for (i = 0; (keys != NULL) && (keys[i] != NULL); i++)
     {
-      if (g_str_has_prefix (keys[i], "/state/") && g_str_has_suffix (keys[i], "/enable"))
-        enable_id = keys[i];
       if (g_str_has_prefix (keys[i], "/state/") && g_str_has_suffix (keys[i], "/status"))
         status_id = keys[i];
     }
 
-  if ((enable_id == NULL) || (status_id == NULL))
+  if (status_id == NULL)
     goto exit;
 
   while (!g_atomic_int_get (&shutdown))
     {
       hyscan_param_list_clear (list);
-      hyscan_param_list_add (list, enable_id);
       hyscan_param_list_add (list, status_id);
 
       if (hyscan_param_get (param, list))
-        {
-          g_print ("Sensor %s: data %s\n",
-                   hyscan_param_list_get_boolean (list, enable_id) ? "enabled" : "disabled",
-                   hyscan_param_list_get_string (list, status_id));
-        }
+        g_print ("Sensor status: %s\n", hyscan_param_list_get_string (list, status_id));
 
       g_usleep (1000000);
     }
@@ -351,7 +343,7 @@ main (int    argc,
     g_error ("Unknown sensor uri %s", uri);
 
   /* Параметры подключения. */
-  URI = g_ascii_strup (uri, -1);
+  URI = g_ascii_strdown (uri, -1);
   params = hyscan_param_list_new ();
   connect = hyscan_discover_config (HYSCAN_DISCOVER (driver), uri);
 

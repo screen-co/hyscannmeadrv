@@ -79,7 +79,8 @@
 
 #define N_BUFFERS 16
 #define MAX_MSG_SIZE 4084
-#define MAX_NMEA_SIZE 254
+#define MAX_STRING_SIZE 253
+#define RX_TIMEOUT 2.0
 
 enum
 {
@@ -91,41 +92,40 @@ enum
 
 typedef struct
 {
-  gint64               time;                   /* Время приёма сообщения. */
-  gchar                nmea[MAX_MSG_SIZE];     /* Данные. */
-  guint32              size;                   /* Размер сообщения. */
+  gint64           time;                       /* Время приёма сообщения. */
+  gchar            data[MAX_MSG_SIZE];         /* Данные. */
+  guint32          size;                       /* Размер сообщения. */
 } HyScanNmeaReceiverMessage;
 
 struct _HyScanNmeaReceiverPrivate
 {
-  GThread             *emmiter;                /* Поток отправки данных. */
+  GThread         *emmiter;                    /* Поток отправки данных. */
 
-  gboolean             terminate;              /* Признак необходимости завершения работы. */
-  gboolean             skip_broken;            /* Признак необходимости пропуска битых NMEA строк. */
+  gboolean         terminate;                  /* Признак необходимости завершения работы. */
+  gboolean         skip_broken;                /* Признак необходимости пропуска битых NMEA строк. */
 
-  GTimer              *timeout;                /* Таймер отправки сообщения по таймауту. */
-  GAsyncQueue         *queue;                  /* Очередь сообщений для отправки клиенту. */
-  HyScanSlicePool     *buffers;                /* Список буферов приёма данных. */
+  GTimer          *timeout;                    /* Таймер отправки сообщения по таймауту. */
+  GAsyncQueue     *queue;                      /* Очередь сообщений для отправки клиенту. */
+  HyScanSlicePool *buffers;                    /* Список буферов приёма данных. */
+  GRWLock          lock;                       /* Блокировка доступа к списку буферов. */
 
-  gint64               rx_time;                /* Метка времени приёма начала строки. */
-  gint                 nmea_time;              /* NMEA время сообщения. */
-  gint64               message_time;           /* Метка времени сообщения. */
+  gint64           rx_time;                    /* Метка времени приёма начала строки. */
+  gint             nmea_time;                  /* NMEA время сообщения. */
+  gint64           message_time;               /* Метка времени сообщения. */
 
-  gchar                message[MAX_MSG_SIZE];  /* Буфер собираемого сообщения. */
-  guint32              message_size;           /* Размер сообщения. */
+  gchar            message[MAX_MSG_SIZE];      /* Буфер собираемого сообщения. */
+  guint32          message_size;               /* Размер сообщения. */
 
-  gchar                string[MAX_NMEA_SIZE+2];/* NMEA строка. */
-  guint                string_size;            /* Размер NMEA строки. */
-
-  GRWLock              lock;                   /* Блокировка доступа к списку буферов. */
+  gchar            string[MAX_STRING_SIZE+3];  /* NMEA строка. */
+  guint            string_size;                /* Размер NMEA строки. */
 };
 
-static void            hyscan_nmea_receiver_object_constructed (GObject       *object);
-static void            hyscan_nmea_receiver_object_finalize    (GObject       *object);
+static void        hyscan_nmea_receiver_object_constructed (GObject       *object);
+static void        hyscan_nmea_receiver_object_finalize    (GObject       *object);
 
-static gpointer        hyscan_nmea_receiver_emmiter            (gpointer       user_data);
+static gpointer    hyscan_nmea_receiver_emmiter            (gpointer       user_data);
 
-static guint           hyscan_nmea_receiver_signals[SIGNAL_LAST] = { 0 };
+static guint       hyscan_nmea_receiver_signals[SIGNAL_LAST] = { 0 };
 
 G_DEFINE_TYPE_WITH_PRIVATE (HyScanNmeaReceiver, hyscan_nmea_receiver, G_TYPE_OBJECT)
 
@@ -247,7 +247,7 @@ hyscan_nmea_receiver_emmiter (gpointer user_data)
         continue;
 
       g_signal_emit (receiver, hyscan_nmea_receiver_signals[SIGNAL_NMEA_DATA], 0,
-                     message->time, message->nmea, message->size);
+                     message->time, message->data, message->size);
 
       g_rw_lock_writer_lock (&priv->lock);
       hyscan_slice_pool_push (&priv->buffers, message);
@@ -313,6 +313,14 @@ hyscan_nmea_receiver_add_data (HyScanNmeaReceiver *receiver,
 
   priv = receiver->priv;
 
+  /* Если данные не приходили длительное время, очистим текущий буфер. */
+  if (g_timer_elapsed (priv->timeout, NULL) > RX_TIMEOUT)
+    {
+      priv->message_time = 0;
+      priv->message_size = 0;
+      priv->string_size = 0;
+    }
+
   /* Обрабатываем данные по отдельным символам. */
   for (rxi = 0; rxi < size; rxi++)
     {
@@ -334,7 +342,7 @@ hyscan_nmea_receiver_add_data (HyScanNmeaReceiver *receiver,
       if (rx_data != '\r')
         {
           /* Если строка слишком длинная, пропускаем её. */
-          if (priv->string_size > MAX_NMEA_SIZE)
+          if (priv->string_size > MAX_STRING_SIZE)
             {
               priv->string_size = 0;
               continue;
@@ -429,9 +437,9 @@ hyscan_nmea_receiver_add_data (HyScanNmeaReceiver *receiver,
 
               if (message != NULL)
                 {
-                  message->time = priv->message_time;
+                  message->time = priv->rx_time;
                   message->size = priv->string_size;
-                  memcpy (message->nmea, priv->string, priv->string_size);
+                  memcpy (message->data, priv->string, priv->string_size);
                   g_async_queue_push (priv->queue, message);
                 }
 
@@ -454,7 +462,7 @@ hyscan_nmea_receiver_add_data (HyScanNmeaReceiver *receiver,
                 {
                   message->time = priv->message_time;
                   message->size = priv->message_size + 1;
-                  memcpy (message->nmea, priv->message, priv->message_size + 1);
+                  memcpy (message->data, priv->message, priv->message_size + 1);
                   g_async_queue_push (priv->queue, message);
                 }
 
@@ -508,7 +516,7 @@ hyscan_nmea_receiver_flush (HyScanNmeaReceiver  *receiver,
         {
           message->time = priv->message_time;
           message->size = priv->message_size + 1;
-          memcpy (message->nmea, priv->message, priv->message_size + 1);
+          memcpy (message->data, priv->message, priv->message_size + 1);
           g_async_queue_push (priv->queue, message);
 
           priv->message_time = 0;

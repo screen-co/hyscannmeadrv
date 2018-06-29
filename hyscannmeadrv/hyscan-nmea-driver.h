@@ -41,8 +41,8 @@
 
 G_BEGIN_DECLS
 
-#define HYSCAN_NMEA_DRIVER_UART_URI         "NMEA://UART"
-#define HYSCAN_NMEA_DRIVER_UDP_URI          "NMEA://UDP"
+#define HYSCAN_NMEA_DRIVER_UART_URI         "nmea://uart"
+#define HYSCAN_NMEA_DRIVER_UDP_URI          "nmea://udp"
 
 #define HYSCAN_TYPE_NMEA_DRIVER             (hyscan_nmea_driver_get_type ())
 #define HYSCAN_NMEA_DRIVER(obj)             (G_TYPE_CHECK_INSTANCE_CAST ((obj), HYSCAN_TYPE_NMEA_DRIVER, HyScanNmeaDriver))

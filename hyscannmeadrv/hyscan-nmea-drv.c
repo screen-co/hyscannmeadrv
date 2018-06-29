@@ -68,25 +68,25 @@ hyscan_driver_info (void)
                                                  HYSCAN_DATA_SCHEMA_ACCESS_READONLY);
 
   hyscan_data_schema_builder_key_string_create  (builder, "/info/name",
-                                                 _ ("Name"), NULL,
+                                                 _("Name"), NULL,
                                                  "NMEA");
   hyscan_data_schema_builder_key_set_access     (builder, "/info/name",
                                                  HYSCAN_DATA_SCHEMA_ACCESS_READONLY);
 
   hyscan_data_schema_builder_key_string_create  (builder, "/info/description",
-                                                 _ ("Description"), NULL,
-                                                 _ ("HyScan NMEA driver"));
+                                                 _("Description"), NULL,
+                                                 _("HyScan NMEA driver"));
   hyscan_data_schema_builder_key_set_access     (builder, "/info/description",
                                                  HYSCAN_DATA_SCHEMA_ACCESS_READONLY);
 
   hyscan_data_schema_builder_key_string_create  (builder, "/info/version",
-                                                 _ ("Version"), NULL,
+                                                 _("Version"), NULL,
                                                  HYSCAN_NMEA_DRIVER_VERSION);
   hyscan_data_schema_builder_key_set_access     (builder, "/info/version",
                                                  HYSCAN_DATA_SCHEMA_ACCESS_READONLY);
 
   hyscan_data_schema_builder_key_string_create  (builder, "/info/id",
-                                                 _ ("Build id"), NULL,
+                                                 _("Build id"), NULL,
                                                  HYSCAN_NMEA_DRIVER_BUILD_ID);
   hyscan_data_schema_builder_key_set_access     (builder, "/info/id",
                                                  HYSCAN_DATA_SCHEMA_ACCESS_READONLY);

@@ -70,12 +70,12 @@ hyscan_nmea_discover_list (HyScanDiscover *discover)
   GList *uris = NULL;
   HyScanDiscoverInfo *info;
 
-  info = hyscan_discover_info_new (_ ("UDP NMEA sensor"),
+  info = hyscan_discover_info_new (_("UDP NMEA sensor"),
                                    HYSCAN_NMEA_DRIVER_UDP_URI,
                                    TRUE);
   uris = g_list_prepend (uris, info);
 
-  info = hyscan_discover_info_new (_ ("UART NMEA sensor"),
+  info = hyscan_discover_info_new (_("UART NMEA sensor"),
                                    HYSCAN_NMEA_DRIVER_UART_URI,
                                    TRUE);
   uris = g_list_prepend (uris, info);
@@ -94,7 +94,7 @@ static gboolean
 hyscan_nmea_discover_check (HyScanDiscover *discover,
                             const gchar    *uri)
 {
-  gchar *URI = g_ascii_strup (uri, -1);
+  gchar *URI = g_ascii_strdown (uri, -1);
   gboolean status = FALSE;
 
   if (g_strcmp0 (URI, HYSCAN_NMEA_DRIVER_UDP_URI) == 0)
