@@ -52,7 +52,7 @@ status_check (gpointer data)
   HyScanDataSchema *schema = hyscan_param_schema (param);
   HyScanParamList *list = hyscan_param_list_new ();
 
-  gchar **keys = hyscan_data_schema_list_keys (schema);
+  const gchar * const *keys = hyscan_data_schema_list_keys (schema);
   const gchar *status_id = NULL;
 
   guint i;
@@ -80,7 +80,6 @@ status_check (gpointer data)
 exit:
   g_object_unref (schema);
   g_object_unref (list);
-  g_strfreev (keys);
 
   return NULL;
 }
@@ -195,7 +194,7 @@ main (int    argc,
   if (show_info)
     {
       HyScanDataSchema *info;
-      gchar **keys;
+      const gchar * const *keys;
       guint i;
 
       info = hyscan_driver_get_info (".", "nmea");
@@ -218,7 +217,6 @@ main (int    argc,
         }
       g_print ("\n");
 
-      g_strfreev (keys);
       g_object_unref (info);
 
       goto exit;
