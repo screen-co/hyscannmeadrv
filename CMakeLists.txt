@@ -81,6 +81,6 @@ endif ()
 include_directories ("${CMAKE_CURRENT_SOURCE_DIR}/hyscannmeadrv")
 
 add_definitions (-DG_LOG_DOMAIN="HyScanNMEADrv")
-add_definitions (-DGETTEXT_PACKAGE="hyscannmeadrv")
+add_definitions (-DGETTEXT_PACKAGE="hyscan-nmea-drv")
 add_subdirectory (hyscannmeadrv)
 add_subdirectory (tests)
