@@ -51,7 +51,6 @@ hyscan_driver_info (void)
 {
   HyScanDataSchemaBuilder *builder;
   HyScanDataSchema *info;
-  gchar *data;
 
   builder = hyscan_data_schema_builder_new ("driver-info");
 
@@ -97,11 +96,9 @@ hyscan_driver_info (void)
   hyscan_data_schema_builder_key_set_access     (builder, "/api/version",
                                                  HYSCAN_DATA_SCHEMA_ACCESS_READONLY);
 
-  data = hyscan_data_schema_builder_get_data (builder);
-  info = hyscan_data_schema_new_from_string (data, "driver-info");
+  info = hyscan_data_schema_builder_get_schema (builder);
 
   g_object_unref (builder);
-  g_free (data);
 
   return info;
 }

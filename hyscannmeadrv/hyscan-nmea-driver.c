@@ -40,8 +40,8 @@
  * Класс реализует драйвер NMEA датчика обеспечивая приём данных через UART
  * порт или UDP порт. Класс реализует интерфейсы #HyScanSensor и #HyScanParam.
  * Выбор типа подключения осуществляется через путь к датчику - URI.
- * Для подключения через UART порт должен быть указан путь NMEA://UART, а для
- * UDP порта NMEA://UDP.
+ * Для подключения через UART порт должен быть указан путь nmea://uart, а для
+ * UDP порта nmea://udp.
  *
  * Если параметры подключения не указаны, для UART порта запускается процесс
  * автоматического поиска подключенных датчиков на всех доступных UART портах.
@@ -87,9 +87,9 @@ enum
 struct _HyScanNmeaDriverPrivate
 {
   gchar               *uri;                    /* Путь к датчику. */
+  HyScanParamList     *params;                 /* Параметры подключения. */
 
-  HyScanDataSchema    *connect_schema;         /* Схема параметров подключения. */
-  HyScanDataSchema    *sensor_schema;          /* Схема датчика. */
+  HyScanDataSchema    *schema;          /* Схема датчика. */
   gboolean             enable;                 /* Признак активности датчика. */
 
   gboolean             shutdown;               /* Признак завершения работы. */
@@ -114,7 +114,7 @@ struct _HyScanNmeaDriverPrivate
   gdouble              warning_timeout;        /* Таймаут приёма данных - предупреждение. */
   gdouble              error_timeout;          /* Таймаут приёма данных - перезапуск порта. */
 
-  gchar               *state_prefix   ;        /* Префикс параметров /state. */
+  gchar               *state_prefix;           /* Префикс параметров /state. */
 };
 
 static void        hyscan_nmea_driver_param_interface_init     (HyScanParamInterface  *iface);
@@ -207,76 +207,15 @@ hyscan_nmea_driver_set_property (GObject      *object,
   switch (prop_id)
     {
     case PROP_URI:
-      {
-        priv->uri = g_ascii_strdown (g_value_get_string (value), -1);
-        priv->connect_schema = hyscan_nmea_driver_get_connect_schema (priv->uri);
-      }
+      priv->uri = g_ascii_strdown (g_value_get_string (value), -1);
       break;
 
     case PROP_PARAMS:
-      {
-        HyScanParamList *list = g_value_get_object (value);
-        const gchar * const *params;
-        gboolean bad_value = FALSE;
-        guint i;
-
-        /* Должна быть известна схема подключения. */
-        if ((list == NULL) || (priv->connect_schema == NULL))
-          break;
-
-        /* Список параметров. */
-        params = hyscan_param_list_params (list);
-        if (params == NULL)
-          break;
-
-        /* Проверяем значения параметров по схеме подключения. */
-        for (i = 0; params[i] != NULL; i++)
-          {
-            GVariant *value = hyscan_param_list_get (list, params[i]);
-
-            if (!hyscan_data_schema_has_key (priv->connect_schema, params[i]))
-              {
-                g_warning ("HyScanNmeaDriver: unsupported parameter '%s'", params[i]);
-                bad_value = TRUE;
-              }
-
-            if (!hyscan_data_schema_key_check (priv->connect_schema, params[i], value))
-              {
-                g_warning ("HyScanNmeaDriver: bad value for parameter '%s'", params[i]);
-                bad_value = TRUE;
-              }
-
-            g_clear_pointer (&value, g_variant_unref);
-          }
-
-        /* Ошибка в параметрах. */
-        if (bad_value)
-          break;
-
-        /* Таймауты. */
-        if (hyscan_param_list_contains (list, TIMEOUT_WARNING_PARAM))
-          priv->warning_timeout = hyscan_param_list_get_double (list, TIMEOUT_WARNING_PARAM);
-        if (hyscan_param_list_contains (list, TIMEOUT_ERROR_PARAM))
-          priv->error_timeout = hyscan_param_list_get_double (list, TIMEOUT_ERROR_PARAM);
-
-        /* Параметры UART подключения. */
-        if (hyscan_param_list_contains (list, UART_PORT_PARAM))
-          priv->uart_port = hyscan_param_list_get_enum (list, UART_PORT_PARAM);
-        if (hyscan_param_list_contains (list, UART_MODE_PARAM))
-          priv->uart_mode = hyscan_param_list_get_enum (list, UART_MODE_PARAM);
-
-        /* Параметры UDP подключения. */
-        if (hyscan_param_list_contains (list, UDP_ADDRESS_PARAM))
-          priv->udp_address = hyscan_param_list_get_enum (list, UDP_ADDRESS_PARAM);
-        if (hyscan_param_list_contains (list, UDP_PORT_PARAM))
-          priv->udp_port = hyscan_param_list_get_integer (list, UDP_PORT_PARAM);
-      }
+      priv->params = g_value_dup_object (value);
       break;
 
     default:
-      {
-        G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
-      }
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
     }
 }
@@ -289,6 +228,30 @@ hyscan_nmea_driver_object_constructed (GObject *object)
 
   GRand *rand;
   gchar *dev_id;
+
+  /* Параметры подключения. */
+  if ((priv->params != NULL) &&
+      hyscan_nmea_driver_check_connect (priv->uri, priv->params))
+    {
+      /* Таймауты. */
+      if (hyscan_param_list_contains (priv->params, TIMEOUT_WARNING_PARAM))
+        priv->warning_timeout = hyscan_param_list_get_double (priv->params, TIMEOUT_WARNING_PARAM);
+      if (hyscan_param_list_contains (priv->params, TIMEOUT_ERROR_PARAM))
+        priv->error_timeout = hyscan_param_list_get_double (priv->params, TIMEOUT_ERROR_PARAM);
+
+      /* Параметры UART подключения. */
+      if (hyscan_param_list_contains (priv->params, UART_PORT_PARAM))
+        priv->uart_port = hyscan_param_list_get_enum (priv->params, UART_PORT_PARAM);
+      if (hyscan_param_list_contains (priv->params, UART_MODE_PARAM))
+        priv->uart_mode = hyscan_param_list_get_enum (priv->params, UART_MODE_PARAM);
+
+      /* Параметры UDP подключения. */
+      if (hyscan_param_list_contains (priv->params, UDP_ADDRESS_PARAM))
+        priv->udp_address = hyscan_param_list_get_enum (priv->params, UDP_ADDRESS_PARAM);
+      if (hyscan_param_list_contains (priv->params, UDP_PORT_PARAM))
+        priv->udp_port = hyscan_param_list_get_integer (priv->params, UDP_PORT_PARAM);
+    }
+  g_clear_object (&priv->params);
 
   /* По умолчанию приём данных включен. */
   priv->enable = TRUE;
@@ -320,7 +283,7 @@ hyscan_nmea_driver_object_constructed (GObject *object)
   priv->state_prefix = g_strdup_printf ("/state/%s/", dev_id);
 
   /* Схема датчика. */
-  priv->sensor_schema = hyscan_nmea_driver_create_schema (priv->name, dev_id);
+  priv->schema = hyscan_nmea_driver_create_schema (priv->name, dev_id);
 
   g_rand_free (rand);
   g_free (dev_id);
@@ -339,8 +302,7 @@ hyscan_nmea_driver_object_finalize (GObject *object)
   g_clear_object (&priv->transport);
 
   g_object_unref (priv->buffer);
-  g_object_unref (priv->sensor_schema);
-  g_clear_object (&priv->connect_schema);
+  g_object_unref (priv->schema);
 
   g_timer_destroy (priv->data_timer);
 
@@ -360,7 +322,6 @@ hyscan_nmea_driver_create_schema (const gchar *name,
   HyScanSensorSchema *sensor;
   HyScanDataSchema *schema;
   gchar *key_id;
-  gchar *data;
 
   builder = hyscan_data_schema_builder_new ("sensor");
   sensor = hyscan_sensor_schema_new (builder);
@@ -380,12 +341,10 @@ hyscan_nmea_driver_create_schema (const gchar *name,
   hyscan_data_schema_builder_key_set_access (builder, key_id, HYSCAN_DATA_SCHEMA_ACCESS_READONLY);
   g_free (key_id);
 
-  data = hyscan_data_schema_builder_get_data (builder);
-  schema = hyscan_data_schema_new_from_string (data, "sensor");
+  schema = hyscan_data_schema_builder_get_schema (builder);
 
   g_object_unref (sensor);
   g_object_unref (builder);
-  g_free (data);
 
   return schema;
 }
@@ -751,7 +710,7 @@ hyscan_nmea_driver_param_schema (HyScanParam *param)
   HyScanNmeaDriver *driver = HYSCAN_NMEA_DRIVER (param);
   HyScanNmeaDriverPrivate *priv = driver->priv;
 
-  return g_object_ref (priv->sensor_schema);
+  return g_object_ref (priv->schema);
 }
 
 static gboolean
@@ -851,17 +810,24 @@ hyscan_nmea_driver_new (const gchar     *uri,
  *
  * Функция возвращает схему параметров подключения к NMEA датчику.
  *
- * Returns: #HyScanDataSchema. Для удаления #g_object_unref.
+ * Returns: #HyScanDataSchema или %NULL в случае ошибочного uri.
+ * Для удаления #g_object_unref.
  */
 HyScanDataSchema *
 hyscan_nmea_driver_get_connect_schema (const gchar *uri)
 {
   HyScanDataSchemaBuilder *builder;
   HyScanDataSchema *schema;
-  gchar *data;
   gchar *URI;
 
   URI = g_ascii_strdown (uri, -1);
+
+  if (!g_str_has_prefix (URI, HYSCAN_NMEA_DRIVER_UART_URI) &&
+      !g_str_has_prefix (URI, HYSCAN_NMEA_DRIVER_UDP_URI))
+    {
+      g_free (URI);
+      return NULL;
+    }
 
   builder = hyscan_data_schema_builder_new ("params");
 
@@ -960,14 +926,57 @@ hyscan_nmea_driver_get_connect_schema (const gchar *uri)
                                                      1024, 65535, 1);
     }
 
-  data = hyscan_data_schema_builder_get_data (builder);
-  schema = hyscan_data_schema_new_from_string (data, "params");
+  schema = hyscan_data_schema_builder_get_schema (builder);
 
   g_object_unref (builder);
-  g_free (data);
   g_free (URI);
 
   return schema;
+}
+
+/**
+ * hyscan_nmea_driver_check_connect:
+ * @uri: путь к датчика
+ * @params: параметры драйвера
+ *
+ * Функция проверяет возможность подключения к датчику для указанного пути
+ * и параметров драйвера.
+ *
+ * Returns: %TRUE если подключение возможно, иначе %FALSE.
+ */
+gboolean
+hyscan_nmea_driver_check_connect (const gchar     *uri,
+                                  HyScanParamList *params)
+{
+  HyScanDataSchema *schema;
+  const gchar * const *names;
+  gboolean status = FALSE;
+  guint i;
+
+  schema = hyscan_nmea_driver_get_connect_schema (uri);
+  if (schema == NULL)
+    goto exit;
+
+  status = TRUE;
+
+  if (params == NULL)
+    goto exit;
+
+  names = hyscan_param_list_params (params);
+  if (names == NULL)
+    goto exit;
+
+  for (i = 0; names[i] != NULL; i++)
+    {
+      GVariant *value = hyscan_param_list_get (params, names[i]);
+      if (!hyscan_data_schema_key_check (schema, names[i], value))
+        status = FALSE;
+      g_variant_unref (value);
+    }
+
+exit:
+  g_clear_object (&schema);
+  return status;
 }
 
 static void

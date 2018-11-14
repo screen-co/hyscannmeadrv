@@ -77,6 +77,10 @@ HyScanNmeaDriver *     hyscan_nmea_driver_new                  (const gchar     
 HYSCAN_API
 HyScanDataSchema *     hyscan_nmea_driver_get_connect_schema   (const gchar           *uri);
 
+HYSCAN_API
+gboolean               hyscan_nmea_driver_check_connect        (const gchar           *uri,
+                                                                HyScanParamList       *params);
+
 G_END_DECLS
 
 #endif /* __HYSCAN_NMEA_DRIVER_H__ */

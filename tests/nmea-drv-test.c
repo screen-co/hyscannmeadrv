@@ -235,7 +235,7 @@ main (int    argc,
 
           connect = hyscan_discover_config (HYSCAN_DISCOVER (driver), info->uri);
 
-          g_print ("%s\n  uri: %s\n", info->info, info->uri);
+          g_print ("%s\n  uri: %s\n", info->name, info->uri);
 
           /* Параметры UART датчика. */
           if (g_strcmp0 (info->uri, HYSCAN_NMEA_DRIVER_UART_URI) == 0)
@@ -336,14 +336,12 @@ main (int    argc,
       goto exit;
     }
 
-  /* Проверяем URI датчика. */
-  if (!hyscan_discover_check (HYSCAN_DISCOVER (driver), uri))
-    g_error ("Unknown sensor uri %s", uri);
-
   /* Параметры подключения. */
   URI = g_ascii_strdown (uri, -1);
   params = hyscan_param_list_new ();
   connect = hyscan_discover_config (HYSCAN_DISCOVER (driver), uri);
+  if (connect == NULL)
+    g_error ("Unknown sensor uri %s", uri);
 
   /* Параметры подключения UART датчика. */
   if (g_strcmp0 (URI, HYSCAN_NMEA_DRIVER_UART_URI) == 0)
@@ -405,6 +403,10 @@ main (int    argc,
       if (udp_port != 0)
         hyscan_param_list_set_integer (params, "/udp/port", udp_port);
     }
+
+  /* Проверяем параметры подключения к датчику. */
+  if (!hyscan_discover_check (HYSCAN_DISCOVER (driver), uri, params))
+    g_error ("Unknown sensor uri %s", uri);
 
   /* Подключение к датчику. */
   nmea = hyscan_discover_connect (HYSCAN_DISCOVER (driver), uri, params);

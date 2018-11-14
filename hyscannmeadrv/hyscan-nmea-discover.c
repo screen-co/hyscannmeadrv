@@ -35,17 +35,20 @@
 /**
  * SECTION: hyscan-nmea-discover
  * @Short_description: класс подключения к NMEA датчикам
- * @Title: HyScanNmeaDiscoer
+ * @Title: HyScanNmeaDiscover
  *
  * Класс реализует интерфейс #HyScanDiscover и предназначен для организации
  * подключения к NMEA датчикам. Этот класс предназначен для использования
  * драйвером NMEA датчика.
  */
 
+#include <hyscan-data-schema-builder.h>
+
 #include "hyscan-nmea-discover.h"
-#include <hyscan-nmea-driver.h>
-#include <hyscan-nmea-uart.h>
-#include <hyscan-nmea-udp.h>
+#include "hyscan-nmea-driver.h"
+#include "hyscan-nmea-uart.h"
+#include "hyscan-nmea-udp.h"
+#include "hyscan-nmea-drv.h"
 
 #include <glib/gi18n-lib.h>
 
@@ -64,21 +67,62 @@ hyscan_nmea_discover_init (HyScanNmeaDiscover *nmea)
 {
 }
 
+static HyScanDataSchema *
+hyscan_nmea_discover_info_schema (void)
+{
+  HyScanDataSchemaBuilder *builder;
+  HyScanDataSchema *info;
+
+  builder = hyscan_data_schema_builder_new ("driver-info");
+
+  hyscan_data_schema_builder_key_string_create  (builder, "/name",
+                                                 _("Name"), NULL,
+                                                 _("NMEA 0183 compatible device"));
+  hyscan_data_schema_builder_key_set_access     (builder, "/name",
+                                                 HYSCAN_DATA_SCHEMA_ACCESS_READONLY);
+
+  hyscan_data_schema_builder_key_string_create  (builder, "/version",
+                                                 _("Driver version"), NULL,
+                                                 HYSCAN_NMEA_DRIVER_VERSION);
+  hyscan_data_schema_builder_key_set_access     (builder, "/version",
+                                                 HYSCAN_DATA_SCHEMA_ACCESS_READONLY);
+
+  info = hyscan_data_schema_builder_get_schema (builder);
+
+  g_object_unref (builder);
+
+  return info;
+}
+
+static void
+hyscan_nmea_discover_start (HyScanDiscover *discover)
+{
+  g_signal_emit_by_name (discover, "progress", 100.0);
+  g_signal_emit_by_name (discover, "completed");
+}
+
 static GList *
 hyscan_nmea_discover_list (HyScanDiscover *discover)
 {
   GList *uris = NULL;
   HyScanDiscoverInfo *info;
+  HyScanDataSchema *schema;
+
+  schema = hyscan_nmea_discover_info_schema ();
 
   info = hyscan_discover_info_new (_("UDP NMEA sensor"),
+                                   schema,
                                    HYSCAN_NMEA_DRIVER_UDP_URI,
                                    TRUE);
   uris = g_list_prepend (uris, info);
 
   info = hyscan_discover_info_new (_("UART NMEA sensor"),
+                                   schema,
                                    HYSCAN_NMEA_DRIVER_UART_URI,
                                    TRUE);
   uris = g_list_prepend (uris, info);
+
+  g_object_unref (schema);
 
   return uris;
 }
@@ -91,20 +135,11 @@ hyscan_nmea_discover_config (HyScanDiscover *discover,
 }
 
 static gboolean
-hyscan_nmea_discover_check (HyScanDiscover *discover,
-                            const gchar    *uri)
+hyscan_nmea_discover_check (HyScanDiscover  *discover,
+                            const gchar     *uri,
+                            HyScanParamList *params)
 {
-  gchar *URI = g_ascii_strdown (uri, -1);
-  gboolean status = FALSE;
-
-  if (g_strcmp0 (URI, HYSCAN_NMEA_DRIVER_UDP_URI) == 0)
-    status = TRUE;
-  if (g_strcmp0 (URI, HYSCAN_NMEA_DRIVER_UART_URI) == 0)
-    status = TRUE;
-
-  g_free (URI);
-
-  return status;
+  return hyscan_nmea_driver_check_connect (uri, params);
 }
 
 static HyScanDevice *
@@ -131,7 +166,7 @@ hyscan_nmea_discover_new (void)
 static void
 hyscan_nmea_discover_interface_init (HyScanDiscoverInterface *iface)
 {
-  iface->start = NULL;
+  iface->start = hyscan_nmea_discover_start;
   iface->stop = NULL;
   iface->list = hyscan_nmea_discover_list;
   iface->config = hyscan_nmea_discover_config;
