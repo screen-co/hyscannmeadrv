@@ -89,7 +89,7 @@ struct _HyScanNmeaDriverPrivate
   gchar               *uri;                    /* Путь к датчику. */
   HyScanParamList     *params;                 /* Параметры подключения. */
 
-  HyScanDataSchema    *schema;          /* Схема датчика. */
+  HyScanDataSchema    *schema;                 /* Схема датчика. */
   gboolean             enable;                 /* Признак активности датчика. */
 
   gboolean             shutdown;               /* Признак завершения работы. */
@@ -785,6 +785,21 @@ hyscan_nmea_driver_sensor_set_enable (HyScanSensor *sensor,
   return TRUE;
 }
 
+static gboolean
+hyscan_nmea_driver_sensor_disconnect (HyScanSensor *sensor)
+{
+  HyScanNmeaDriver *driver = HYSCAN_NMEA_DRIVER (sensor);
+  HyScanNmeaDriverPrivate *priv = driver->priv;
+
+  g_atomic_int_set (&priv->shutdown, TRUE);
+  g_clear_pointer (&priv->starter, g_thread_join);
+  g_clear_pointer (&priv->scanner, g_thread_join);
+
+  g_clear_object (&priv->transport);
+
+  return TRUE;
+}
+
 /**
  * hyscan_nmea_driver_new:
  * @uri: путь к датчику
@@ -992,4 +1007,5 @@ hyscan_nmea_driver_sensor_interface_init (HyScanSensorInterface *iface)
 {
   iface->set_sound_velocity = hyscan_nmea_driver_sensor_set_sound_velocity;
   iface->set_enable = hyscan_nmea_driver_sensor_set_enable;
+  iface->disconnect = hyscan_nmea_driver_sensor_disconnect;
 }
