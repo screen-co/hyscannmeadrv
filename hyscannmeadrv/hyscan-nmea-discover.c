@@ -79,13 +79,13 @@ hyscan_nmea_discover_info_schema (void)
                                                  _("Name"), NULL,
                                                  _("NMEA 0183 compatible device"));
   hyscan_data_schema_builder_key_set_access     (builder, "/name",
-                                                 HYSCAN_DATA_SCHEMA_ACCESS_READONLY);
+                                                 HYSCAN_DATA_SCHEMA_ACCESS_READ);
 
   hyscan_data_schema_builder_key_string_create  (builder, "/version",
                                                  _("Driver version"), NULL,
                                                  HYSCAN_NMEA_DRIVER_VERSION);
   hyscan_data_schema_builder_key_set_access     (builder, "/version",
-                                                 HYSCAN_DATA_SCHEMA_ACCESS_READONLY);
+                                                 HYSCAN_DATA_SCHEMA_ACCESS_READ);
 
   info = hyscan_data_schema_builder_get_schema (builder);
 

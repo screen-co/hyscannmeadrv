@@ -332,13 +332,13 @@ hyscan_nmea_driver_create_schema (const gchar *name,
   /* Признак доступности датчика. */
   key_id = g_strdup_printf ("/state/%s/enable", dev_id);
   hyscan_data_schema_builder_key_boolean_create (builder, key_id, _("Enable"), NULL, FALSE);
-  hyscan_data_schema_builder_key_set_access (builder, key_id, HYSCAN_DATA_SCHEMA_ACCESS_READONLY);
+  hyscan_data_schema_builder_key_set_access (builder, key_id, HYSCAN_DATA_SCHEMA_ACCESS_READ);
   g_free (key_id);
 
   /* Статус работы датчика. */
   key_id = g_strdup_printf ("/state/%s/status", dev_id);
   hyscan_data_schema_builder_key_string_create (builder, key_id, _("Status"), NULL, "error");
-  hyscan_data_schema_builder_key_set_access (builder, key_id, HYSCAN_DATA_SCHEMA_ACCESS_READONLY);
+  hyscan_data_schema_builder_key_set_access (builder, key_id, HYSCAN_DATA_SCHEMA_ACCESS_READ);
   g_free (key_id);
 
   schema = hyscan_data_schema_builder_get_schema (builder);
