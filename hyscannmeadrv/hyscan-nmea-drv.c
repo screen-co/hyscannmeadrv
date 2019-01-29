@@ -1,6 +1,6 @@
 /* hyscan-nmea-drv.c
  *
- * Copyright 2018 Screen LLC, Andrei Fadeev <andrei@webcontrol.ru>
+ * Copyright 2018-2019 Screen LLC, Andrei Fadeev <andrei@webcontrol.ru>
  *
  * This file is part of HyScanNMEADrv.
  *
@@ -34,8 +34,7 @@
 
 #include "hyscan-nmea-drv.h"
 #include "hyscan-nmea-discover.h"
-#include <hyscan-data-schema-builder.h>
-#include <hyscan-driver.h>
+#include <hyscan-driver-schema.h>
 
 #include <glib/gi18n-lib.h>
 #include <gmodule.h>
@@ -50,32 +49,16 @@ G_MODULE_EXPORT gpointer
 hyscan_driver_info (void)
 {
   HyScanDataSchemaBuilder *builder;
+  HyScanDriverSchema *driver;
   HyScanDataSchema *info;
 
-  builder = hyscan_data_schema_builder_new ("driver-info");
-
-  hyscan_data_schema_builder_key_integer_create (builder, "/schema/id",
-                                                 "Schema id", NULL,
-                                                 HYSCAN_DRIVER_SCHEMA_ID);
-  hyscan_data_schema_builder_key_set_access     (builder, "/schema/id",
-                                                 HYSCAN_DATA_SCHEMA_ACCESS_READ);
-
-  hyscan_data_schema_builder_key_integer_create (builder, "/schema/version",
-                                                 "Schema version", NULL,
-                                                 HYSCAN_DRIVER_SCHEMA_VERSION);
-  hyscan_data_schema_builder_key_set_access     (builder, "/schema/version",
-                                                 HYSCAN_DATA_SCHEMA_ACCESS_READ);
+  driver = hyscan_driver_schema_new (HYSCAN_DRIVER_SCHEMA_VERSION);
+  builder = HYSCAN_DATA_SCHEMA_BUILDER (driver);
 
   hyscan_data_schema_builder_key_string_create  (builder, "/info/name",
                                                  _("Name"), NULL,
-                                                 "NMEA");
+                                                 "NMEA-0183");
   hyscan_data_schema_builder_key_set_access     (builder, "/info/name",
-                                                 HYSCAN_DATA_SCHEMA_ACCESS_READ);
-
-  hyscan_data_schema_builder_key_string_create  (builder, "/info/description",
-                                                 _("Description"), NULL,
-                                                 _("HyScan NMEA driver"));
-  hyscan_data_schema_builder_key_set_access     (builder, "/info/description",
                                                  HYSCAN_DATA_SCHEMA_ACCESS_READ);
 
   hyscan_data_schema_builder_key_string_create  (builder, "/info/version",
@@ -88,12 +71,6 @@ hyscan_driver_info (void)
                                                  _("Build id"), NULL,
                                                  HYSCAN_NMEA_DRIVER_BUILD_ID);
   hyscan_data_schema_builder_key_set_access     (builder, "/info/id",
-                                                 HYSCAN_DATA_SCHEMA_ACCESS_READ);
-
-  hyscan_data_schema_builder_key_integer_create (builder, "/api/version",
-                                                 "API version", "API version",
-                                                 HYSCAN_DISCOVER_API);
-  hyscan_data_schema_builder_key_set_access     (builder, "/api/version",
                                                  HYSCAN_DATA_SCHEMA_ACCESS_READ);
 
   info = hyscan_data_schema_builder_get_schema (builder);

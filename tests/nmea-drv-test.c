@@ -1,6 +1,6 @@
 /* nmea-drv-test.c
  *
- * Copyright 2018 Screen LLC, Andrei Fadeev <andrei@webcontrol.ru>
+ * Copyright 2018-2019 Screen LLC, Andrei Fadeev <andrei@webcontrol.ru>
  *
  * This file is part of HyScanNMEADrv.
  *
@@ -32,13 +32,13 @@
  * лицензии. Для этого свяжитесь с ООО Экран - <info@screen-co.ru>.
  */
 
-#include <hyscan-driver.h>
-#include <hyscan-sensor.h>
-#include <hyscan-param.h>
-#include <hyscan-buffer.h>
 #include <hyscan-nmea-driver.h>
+#include <hyscan-driver.h>
+#include <hyscan-device-schema.h>
+#include <hyscan-param.h>
+#include <hyscan-sensor.h>
+#include <hyscan-buffer.h>
 
-#include <libxml/parser.h>
 #include <stdio.h>
 #include <math.h>
 
@@ -51,33 +51,39 @@ status_check (gpointer data)
   HyScanParam *param = data;
   HyScanDataSchema *schema = hyscan_param_schema (param);
   HyScanParamList *list = hyscan_param_list_new ();
-
-  const gchar * const *keys = hyscan_data_schema_list_keys (schema);
-  const gchar *status_id = NULL;
-
-  guint i;
-
-  for (i = 0; (keys != NULL) && (keys[i] != NULL); i++)
-    {
-      if (g_str_has_prefix (keys[i], "/state/") && g_str_has_suffix (keys[i], "/status"))
-        status_id = keys[i];
-    }
-
-  if (status_id == NULL)
-    goto exit;
+  GList *status_enums = hyscan_data_schema_get_enum_values (schema, HYSCAN_DEVICE_STATUS_ENUM);
+  const gchar *status_id = "/state/nmea/status";
 
   while (!g_atomic_int_get (&shutdown))
     {
+
       hyscan_param_list_clear (list);
       hyscan_param_list_add (list, status_id);
-
       if (hyscan_param_get (param, list))
-        g_print ("Sensor status: %s\n", hyscan_param_list_get_string (list, status_id));
+        {
+          GList *link = status_enums;
+          const gchar *status_str = "unknown";
+
+          while (link != NULL)
+            {
+              HyScanDataSchemaEnumValue *status = link->data;
+
+              if (status->value == hyscan_param_list_get_enum (list, status_id))
+                {
+                  status_str = status->name;
+                  break;
+                }
+
+              link = g_list_next (link);
+            }
+
+          g_print ("Sensor status: %s\n", status_str);
+        }
 
       g_usleep (1000000);
     }
 
-exit:
+  g_list_free (status_enums);
   g_object_unref (schema);
   g_object_unref (list);
 
@@ -411,7 +417,7 @@ main (int    argc,
   /* Подключение к датчику. */
   nmea = hyscan_discover_connect (HYSCAN_DISCOVER (driver), uri, params);
   g_signal_connect (nmea, "sensor-data", G_CALLBACK (nmea_cb), NULL);
-  g_signal_connect (nmea, "sensor-log", G_CALLBACK (log_cb), NULL);
+  g_signal_connect (nmea, "device-log", G_CALLBACK (log_cb), NULL);
 
   status_thread = g_thread_new ("status", status_check, nmea);
 
@@ -433,7 +439,6 @@ exit:
   g_free (uart_mode);
   g_free (udp_address);
   g_object_unref (driver);
-  xmlCleanupParser ();
 
   return 0;
 }

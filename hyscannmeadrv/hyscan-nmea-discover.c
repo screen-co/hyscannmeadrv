@@ -131,7 +131,7 @@ static HyScanDataSchema *
 hyscan_nmea_discover_config (HyScanDiscover *discover,
                              const gchar    *uri)
 {
-  return hyscan_nmea_driver_get_connect_schema (uri);
+  return hyscan_nmea_driver_get_connect_schema (uri, FALSE);
 }
 
 static gboolean

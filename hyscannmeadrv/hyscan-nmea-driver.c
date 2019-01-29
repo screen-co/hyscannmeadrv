@@ -1,6 +1,6 @@
 /* hyscan-nmea-driver.c
  *
- * Copyright 2018 Screen LLC, Andrei Fadeev <andrei@webcontrol.ru>
+ * Copyright 2018-2019 Screen LLC, Andrei Fadeev <andrei@webcontrol.ru>
  *
  * This file is part of HyScanNMEADrv.
  *
@@ -57,18 +57,24 @@
 #include "hyscan-nmea-uart.h"
 #include "hyscan-nmea-udp.h"
 
+#include <hyscan-param-controller.h>
 #include <hyscan-sensor-schema.h>
 #include <hyscan-buffer.h>
 
 #include <glib/gi18n-lib.h>
 #include <string.h>
 
-#define TIMEOUT_WARNING_PARAM  "/timeout/warning"
-#define TIMEOUT_ERROR_PARAM    "/timeout/error"
-#define UART_PORT_PARAM        "/uart/port"
-#define UART_MODE_PARAM        "/uart/mode"
-#define UDP_ADDRESS_PARAM      "/udp/address"
-#define UDP_PORT_PARAM         "/udp/port"
+#define PARAM_SENSOR_NAME          "/name"
+#define PARAM_TIMEOUT_WARNING      "/timeout/warning"
+#define PARAM_TIMEOUT_ERROR        "/timeout/error"
+#define PARAM_UART_PORT            "/uart/port"
+#define PARAM_UART_MODE            "/uart/mode"
+#define PARAM_UDP_ADDRESS          "/udp/address"
+#define PARAM_UDP_PORT             "/udp/port"
+
+#define DEFAULT_WARNING_TIMEOUT    5.0
+#define DEFAULT_ERROR_TIMEOUT      30.0
+#define DEFAULT_UDP_PORT           10000
 
 enum
 {
@@ -77,86 +83,85 @@ enum
   PROP_PARAMS
 };
 
-enum
+/* Параметры работы устройства. */
+typedef struct
 {
-  NMEA_DRIVER_STATUS_OK,
-  NMEA_DRIVER_STATUS_WARNING,
-  NMEA_DRIVER_STATUS_ERROR
-};
+  gchar                  *name;                /* Название датчика. */
+  gint64                  uart_port;           /* Идентификатор UART порта. */
+  gint64                  uart_mode;           /* Режим работы UART порта. */
+  gint64                  udp_address;         /* Идентификатор IP адреса UDP порта. */
+  gint64                  udp_port;            /* Номер UDP порта. */
+  gdouble                 warning_timeout;     /* Таймаут приёма данных - предупреждение. */
+  gdouble                 error_timeout;       /* Таймаут приёма данных - перезапуск порта. */
+} HyScanNmeaDriverParams;
 
 struct _HyScanNmeaDriverPrivate
 {
-  gchar               *uri;                    /* Путь к датчику. */
-  HyScanParamList     *params;                 /* Параметры подключения. */
+  gchar                  *uri;                 /* Путь к датчику. */
+  HyScanNmeaDriverParams  params;              /* Параметры драйвера. */
 
-  HyScanDataSchema    *schema;                 /* Схема датчика. */
-  gboolean             enable;                 /* Признак активности датчика. */
+  HyScanDataSchema       *schema;              /* Схема датчика. */
+  gboolean                enable;              /* Признак активности датчика. */
 
-  gboolean             shutdown;               /* Признак завершения работы. */
-  GThread             *starter;                /* Поток подключения к NMEA датчикам. */
-  GThread             *scanner;                /* Поток поиска NMEA UART датчиков. */
+  gboolean                shutdown;            /* Признак завершения работы. */
+  GThread                *starter;             /* Поток подключения к NMEA датчикам. */
+  GThread                *scanner;             /* Поток поиска NMEA UART датчиков. */
 
-  GObject             *transport;              /* Класс приёма данных от датчика. */
-  gboolean             io_error;               /* Признак ошибки ввода вывода. */
-  HyScanBuffer        *buffer;                 /* Буфер данных. */
+  GObject                *transport;           /* Класс приёма данных от датчика. */
+  gboolean                io_error;            /* Признак ошибки ввода вывода. */
+  HyScanBuffer           *buffer;              /* Буфер данных. */
 
-  gchar               *name;                   /* Название датчика. */
+  gint                    status;              /* Статус датчика. */
+  gint                    prev_status;         /* Предыдущий статус датчика. */
+  gchar                  *status_name;         /* Название параметра статуса. */
 
-  guint                uart_port;              /* Идентификатор UART порта. */
-  HyScanNmeaUARTMode   uart_mode;              /* Режим работы UART порта. */
-  guint                udp_address;            /* Идентификатор IP адреса UDP порта. */
-  guint16              udp_port;               /* Номер UDP порта. */
-
-  gint                 status;                 /* Статус датчика. */
-  gint                 prev_status;            /* Предыдущий статус датчика. */
-
-  GTimer              *data_timer;             /* Таймер приёма данных. */
-  gdouble              warning_timeout;        /* Таймаут приёма данных - предупреждение. */
-  gdouble              error_timeout;          /* Таймаут приёма данных - перезапуск порта. */
-
-  gchar               *state_prefix;           /* Префикс параметров /state. */
+  GTimer                 *data_timer;          /* Таймер приёма данных. */
 };
 
-static void        hyscan_nmea_driver_param_interface_init     (HyScanParamInterface  *iface);
-static void        hyscan_nmea_driver_sensor_interface_init    (HyScanSensorInterface *iface);
+static void      hyscan_nmea_driver_param_interface_init   (HyScanParamInterface    *iface);
+static void      hyscan_nmea_driver_device_interface_init  (HyScanDeviceInterface   *iface);
+static void      hyscan_nmea_driver_sensor_interface_init  (HyScanSensorInterface   *iface);
 
-static void        hyscan_nmea_driver_set_property             (GObject                *object,
-                                                                guint                   prop_id,
-                                                                const GValue           *value,
-                                                                GParamSpec             *pspec);
-static void        hyscan_nmea_driver_object_constructed       (GObject                *object);
-static void        hyscan_nmea_driver_object_finalize          (GObject                *object);
+static void      hyscan_nmea_driver_set_property           (GObject                 *object,
+                                                            guint                    prop_id,
+                                                            const GValue            *value,
+                                                            GParamSpec              *pspec);
+static void      hyscan_nmea_driver_object_constructed     (GObject                 *object);
+static void      hyscan_nmea_driver_object_finalize        (GObject                 *object);
+
+static void      hyscan_nmea_driver_parse_connect_params   (HyScanParamList         *list,
+                                                            HyScanNmeaDriverParams  *params);
 
 static HyScanDataSchema *
-                   hyscan_nmea_driver_create_schema            (const gchar            *name,
-                                                                const gchar            *dev_id);
+                 hyscan_nmea_driver_create_schema          (const gchar             *name);
 
-static gpointer    hyscan_nmea_driver_starter                  (gpointer                user_data);
+static void      hyscan_nmea_driver_disconnect             (HyScanNmeaDriverPrivate *priv);
 
-static gpointer    hyscan_nmea_driver_scanner                  (gpointer                user_data);
+static gpointer  hyscan_nmea_driver_starter                (gpointer                 user_data);
 
-static void        hyscan_nmea_driver_check_data               (HyScanNmeaDriver       *driver);
+static gpointer  hyscan_nmea_driver_scanner                (gpointer                 user_data);
 
-static void        hyscan_nmea_driver_io_error                 (HyScanNmeaReceiver     *receiver,
-                                                                HyScanNmeaDriver       *driver);
+static void      hyscan_nmea_driver_check_data             (HyScanNmeaDriver        *driver);
 
-static void        hyscan_nmea_driver_tester                   (HyScanNmeaReceiver     *receiver,
-                                                                gint64                  time,
-                                                                const gchar            *data,
-                                                                guint                   size,
-                                                                HyScanNmeaDriver       *driver);
+static void      hyscan_nmea_driver_io_error               (HyScanNmeaReceiver      *receiver,
+                                                            HyScanNmeaDriver        *driver);
 
-static void        hyscan_nmea_driver_emmiter                  (HyScanNmeaReceiver     *receiver,
-                                                                gint64                  time,
-                                                                const gchar            *data,
-                                                                guint                   size,
-                                                                HyScanNmeaDriver       *driver);
+static void      hyscan_nmea_driver_tester                 (HyScanNmeaReceiver      *receiver,
+                                                            gint64                   time,
+                                                            const gchar             *data,
+                                                            guint                    size,
+                                                            HyScanNmeaDriver        *driver);
 
-static guint       driver_id = 0;
+static void      hyscan_nmea_driver_emmiter                (HyScanNmeaReceiver      *receiver,
+                                                            gint64                   time,
+                                                            const gchar             *data,
+                                                            guint                    size,
+                                                            HyScanNmeaDriver        *driver);
 
 G_DEFINE_TYPE_WITH_CODE (HyScanNmeaDriver, hyscan_nmea_driver, G_TYPE_OBJECT,
                          G_ADD_PRIVATE (HyScanNmeaDriver)
                          G_IMPLEMENT_INTERFACE (HYSCAN_TYPE_PARAM,  hyscan_nmea_driver_param_interface_init)
+                         G_IMPLEMENT_INTERFACE (HYSCAN_TYPE_DEVICE, hyscan_nmea_driver_device_interface_init)
                          G_IMPLEMENT_INTERFACE (HYSCAN_TYPE_SENSOR, hyscan_nmea_driver_sensor_interface_init))
 
 static void
@@ -182,17 +187,16 @@ static void
 hyscan_nmea_driver_init (HyScanNmeaDriver *driver)
 {
   driver->priv = hyscan_nmea_driver_get_instance_private (driver);
+  HyScanNmeaDriverParams *params = &driver->priv->params;
 
   /* По умолчанию устанавливаем автоматический выбор скорости
    * UART порта и номер UDP порта в 10000. */
-  driver->priv->uart_mode = HYSCAN_NMEA_UART_MODE_AUTO;
-  driver->priv->udp_port = 10000;
+  params->uart_mode = HYSCAN_NMEA_UART_MODE_AUTO;
+  params->udp_port = DEFAULT_UDP_PORT;
 
   /* Таймауты по умолчанию. */
-  driver->priv->warning_timeout = 5.0;
-  driver->priv->error_timeout = 30.0;
-
-  g_atomic_int_add (&driver_id, 1);
+  params->warning_timeout = DEFAULT_WARNING_TIMEOUT;
+  params->error_timeout = DEFAULT_ERROR_TIMEOUT;
 }
 
 static void
@@ -211,7 +215,7 @@ hyscan_nmea_driver_set_property (GObject      *object,
       break;
 
     case PROP_PARAMS:
-      priv->params = g_value_dup_object (value);
+      hyscan_nmea_driver_parse_connect_params (g_value_get_object (value), &priv->params);
       break;
 
     default:
@@ -226,39 +230,16 @@ hyscan_nmea_driver_object_constructed (GObject *object)
   HyScanNmeaDriver *driver = HYSCAN_NMEA_DRIVER (object);
   HyScanNmeaDriverPrivate *priv = driver->priv;
 
-  GRand *rand;
-  gchar *dev_id;
-
-  /* Параметры подключения. */
-  if ((priv->params != NULL) &&
-      hyscan_nmea_driver_check_connect (priv->uri, priv->params))
-    {
-      /* Таймауты. */
-      if (hyscan_param_list_contains (priv->params, TIMEOUT_WARNING_PARAM))
-        priv->warning_timeout = hyscan_param_list_get_double (priv->params, TIMEOUT_WARNING_PARAM);
-      if (hyscan_param_list_contains (priv->params, TIMEOUT_ERROR_PARAM))
-        priv->error_timeout = hyscan_param_list_get_double (priv->params, TIMEOUT_ERROR_PARAM);
-
-      /* Параметры UART подключения. */
-      if (hyscan_param_list_contains (priv->params, UART_PORT_PARAM))
-        priv->uart_port = hyscan_param_list_get_enum (priv->params, UART_PORT_PARAM);
-      if (hyscan_param_list_contains (priv->params, UART_MODE_PARAM))
-        priv->uart_mode = hyscan_param_list_get_enum (priv->params, UART_MODE_PARAM);
-
-      /* Параметры UDP подключения. */
-      if (hyscan_param_list_contains (priv->params, UDP_ADDRESS_PARAM))
-        priv->udp_address = hyscan_param_list_get_enum (priv->params, UDP_ADDRESS_PARAM);
-      if (hyscan_param_list_contains (priv->params, UDP_PORT_PARAM))
-        priv->udp_port = hyscan_param_list_get_integer (priv->params, UDP_PORT_PARAM);
-    }
-  g_clear_object (&priv->params);
+  /* Название датчика. */
+  if (priv->params.name == NULL)
+    priv->params.name = g_strdup ("nmea");
 
   /* По умолчанию приём данных включен. */
   priv->enable = TRUE;
 
   /* Начальный статус. */
-  priv->status = NMEA_DRIVER_STATUS_ERROR;
-  priv->prev_status = NMEA_DRIVER_STATUS_ERROR;
+  priv->status = HYSCAN_DEVICE_STATUS_ERROR;
+  priv->prev_status = HYSCAN_DEVICE_STATUS_ERROR;
 
   /* Таймер данных. */
   priv->data_timer = g_timer_new ();
@@ -266,27 +247,22 @@ hyscan_nmea_driver_object_constructed (GObject *object)
   /* Буфер данных. */
   priv->buffer = hyscan_buffer_new ();
 
-  /* Название датчика. */
-  priv->name = g_strdup_printf ("nmea%d", driver_id);
-
   /* Автоматический выбор UART порта и режима работы. */
-  if ((g_strcmp0 (priv->uri, HYSCAN_NMEA_DRIVER_UART_URI) == 0) && (priv->uart_port == 0))
-    priv->scanner = g_thread_new ("uart-scanner", hyscan_nmea_driver_scanner, driver);
+  if ((g_strcmp0 (priv->uri, HYSCAN_NMEA_DRIVER_UART_URI) == 0) &&
+      (priv->params.uart_port == 0))
+    {
+      priv->scanner = g_thread_new ("uart-scanner", hyscan_nmea_driver_scanner, driver);
+    }
 
   /* Конкретный UART или UDP порт. */
   else
     priv->starter = g_thread_new ("uart-starter", hyscan_nmea_driver_starter, driver);
 
-  /* Уникальный идентификатор устройства. */
-  rand = g_rand_new ();
-  dev_id = g_strdup_printf ("%s.%04d", priv->name, g_rand_int_range (rand, 1000, 9999));
-  priv->state_prefix = g_strdup_printf ("/state/%s/", dev_id);
+  /* Название параметра статуса. */
+  priv->status_name = g_strdup_printf ("/state/%s/status", priv->params.name);
 
   /* Схема датчика. */
-  priv->schema = hyscan_nmea_driver_create_schema (priv->name, dev_id);
-
-  g_rand_free (rand);
-  g_free (dev_id);
+  priv->schema = hyscan_nmea_driver_create_schema (priv->params.name);
 }
 
 static void
@@ -295,49 +271,73 @@ hyscan_nmea_driver_object_finalize (GObject *object)
   HyScanNmeaDriver *driver = HYSCAN_NMEA_DRIVER (object);
   HyScanNmeaDriverPrivate *priv = driver->priv;
 
-  g_atomic_int_set (&priv->shutdown, TRUE);
-  g_clear_pointer (&priv->starter, g_thread_join);
-  g_clear_pointer (&priv->scanner, g_thread_join);
-
-  g_clear_object (&priv->transport);
-
+  hyscan_nmea_driver_disconnect (priv);
+  g_timer_destroy (priv->data_timer);
   g_object_unref (priv->buffer);
   g_object_unref (priv->schema);
-
-  g_timer_destroy (priv->data_timer);
-
-  g_free (priv->state_prefix);
-  g_free (priv->name);
+  g_free (priv->status_name);
+  g_free (priv->params.name);
   g_free (priv->uri);
 
   G_OBJECT_CLASS (hyscan_nmea_driver_parent_class)->finalize (object);
 }
 
+/* Функция разбирает параметры подключения. */
+static void
+hyscan_nmea_driver_parse_connect_params (HyScanParamList        *list,
+                                         HyScanNmeaDriverParams *params)
+{
+  HyScanParamController *controller;
+  HyScanDataSchema *schema;
+  GString *name;
+
+  if ((list == NULL) || (hyscan_param_list_params (list) == NULL))
+    return;
+
+  name = g_string_new (NULL);
+  controller = hyscan_param_controller_new (NULL);
+
+  schema = hyscan_nmea_driver_get_connect_schema (NULL, TRUE);
+  hyscan_param_controller_set_schema (controller, schema);
+
+  hyscan_param_controller_add_string (controller, PARAM_SENSOR_NAME, name);
+  hyscan_param_controller_add_double (controller, PARAM_TIMEOUT_WARNING, &params->warning_timeout);
+  hyscan_param_controller_add_double (controller, PARAM_TIMEOUT_ERROR, &params->error_timeout);
+  hyscan_param_controller_add_enum   (controller, PARAM_UART_PORT, &params->uart_port);
+  hyscan_param_controller_add_enum   (controller, PARAM_UART_MODE, &params->uart_mode);
+  hyscan_param_controller_add_enum   (controller, PARAM_UDP_ADDRESS, &params->udp_address);
+  hyscan_param_controller_add_enum   (controller, PARAM_UDP_PORT, &params->udp_port);
+
+  if (!hyscan_param_set (HYSCAN_PARAM (controller), list))
+    g_warning ("HyScanNmeaDriver: error in connect params");
+
+  params->name = g_string_free (name, (name->len == 0));
+
+  g_object_unref (controller);
+  g_object_unref (schema);
+}
+
 /* Функция создаёт схему датчика. */
 static HyScanDataSchema *
-hyscan_nmea_driver_create_schema (const gchar *name,
-                                  const gchar *dev_id)
+hyscan_nmea_driver_create_schema (const gchar *name)
 {
   HyScanDataSchemaBuilder *builder;
+  HyScanDeviceSchema *device;
   HyScanSensorSchema *sensor;
   HyScanDataSchema *schema;
   gchar *key_id;
 
-  builder = hyscan_data_schema_builder_new ("sensor");
-  sensor = hyscan_sensor_schema_new (builder);
+  device = hyscan_device_schema_new (HYSCAN_DEVICE_SCHEMA_VERSION);
+  sensor = hyscan_sensor_schema_new (device);
+  builder = HYSCAN_DATA_SCHEMA_BUILDER (device);
 
   /* Описание датчика. */
-  hyscan_sensor_schema_add_sensor (sensor, name, dev_id, _("NMEA sensor"));
-
-  /* Признак доступности датчика. */
-  key_id = g_strdup_printf ("/state/%s/enable", dev_id);
-  hyscan_data_schema_builder_key_boolean_create (builder, key_id, _("Enable"), NULL, FALSE);
-  hyscan_data_schema_builder_key_set_access (builder, key_id, HYSCAN_DATA_SCHEMA_ACCESS_READ);
-  g_free (key_id);
+  hyscan_sensor_schema_add_sensor (sensor, name, name, _("NMEA sensor"));
 
   /* Статус работы датчика. */
-  key_id = g_strdup_printf ("/state/%s/status", dev_id);
-  hyscan_data_schema_builder_key_string_create (builder, key_id, _("Status"), NULL, "error");
+  key_id = g_strdup_printf ("/state/%s/status", name);
+  hyscan_data_schema_builder_key_enum_create (builder, key_id, "Status", NULL,
+                                              HYSCAN_DEVICE_STATUS_ENUM, HYSCAN_DEVICE_STATUS_ERROR);
   hyscan_data_schema_builder_key_set_access (builder, key_id, HYSCAN_DATA_SCHEMA_ACCESS_READ);
   g_free (key_id);
 
@@ -349,12 +349,24 @@ hyscan_nmea_driver_create_schema (const gchar *name,
   return schema;
 }
 
+/* Функция производит отключение от устройства. */
+static void
+hyscan_nmea_driver_disconnect (HyScanNmeaDriverPrivate *priv)
+{
+  g_atomic_int_set (&priv->shutdown, TRUE);
+  g_clear_pointer (&priv->starter, g_thread_join);
+  g_clear_pointer (&priv->scanner, g_thread_join);
+
+  g_clear_object (&priv->transport);
+}
+
 /* Поток подключения к NMEA датчикам. */
 static gpointer
 hyscan_nmea_driver_starter (gpointer user_data)
 {
   HyScanNmeaDriver *driver = user_data;
   HyScanNmeaDriverPrivate *priv = driver->priv;
+  HyScanNmeaDriverParams *params = &priv->params;
 
   while (!g_atomic_int_get (&priv->shutdown))
     {
@@ -378,7 +390,7 @@ hyscan_nmea_driver_starter (gpointer user_data)
               HyScanNmeaUARTDevice *info = device->data;
               guint port_id = g_str_hash (info->path);
 
-              if (port_id == priv->uart_port)
+              if (port_id == params->uart_port)
                 {
                   uart_path = g_strdup (info->path);
                   break;
@@ -393,7 +405,7 @@ hyscan_nmea_driver_starter (gpointer user_data)
             {
               uart = hyscan_nmea_uart_new ();
 
-              if (!hyscan_nmea_uart_set_device (uart, uart_path, priv->uart_mode))
+              if (!hyscan_nmea_uart_set_device (uart, uart_path, params->uart_mode))
                 {
                   g_clear_object (&uart);
                 }
@@ -418,13 +430,13 @@ hyscan_nmea_driver_starter (gpointer user_data)
           gchar *address = NULL;
 
           /* Выбраны все адреса. */
-          if (priv->udp_address == 0)
+          if (params->udp_address == 0)
             {
               address = g_strdup ("any");
             }
 
           /* Loopback адрес. */
-          else if (priv->udp_address == 1)
+          else if (params->udp_address == 1)
             {
               address = g_strdup ("loopback");
             }
@@ -439,7 +451,7 @@ hyscan_nmea_driver_starter (gpointer user_data)
                 {
                   guint address_id = g_str_hash (addresses[i]);
 
-                  if (address_id == priv->udp_address)
+                  if (address_id == params->udp_address)
                     address = g_strdup (addresses [i]);
                 }
 
@@ -450,7 +462,7 @@ hyscan_nmea_driver_starter (gpointer user_data)
             {
               udp = hyscan_nmea_udp_new ();
 
-              if (!hyscan_nmea_udp_set_address (udp, address, priv->udp_port))
+              if (!hyscan_nmea_udp_set_address (udp, address, params->udp_port))
                 {
                   g_clear_object (&udp);
                 }
@@ -552,6 +564,7 @@ static void
 hyscan_nmea_driver_check_data (HyScanNmeaDriver *driver)
 {
   HyScanNmeaDriverPrivate *priv = driver->priv;
+  HyScanNmeaDriverParams *params = &priv->params;
 
   gdouble data_timeout = g_timer_elapsed (priv->data_timer, NULL);
   gint cur_status = g_atomic_int_get (&priv->status);
@@ -563,29 +576,29 @@ hyscan_nmea_driver_check_data (HyScanNmeaDriver *driver)
       g_object_unref (priv->transport);
       g_atomic_pointer_set (&priv->transport, NULL);
 
-      g_atomic_int_set (&priv->status, NMEA_DRIVER_STATUS_ERROR);
+      g_atomic_int_set (&priv->status, HYSCAN_DEVICE_STATUS_ERROR);
       g_atomic_int_set (&priv->io_error, FALSE);
 
-      cur_status = NMEA_DRIVER_STATUS_ERROR;
+      cur_status = HYSCAN_DEVICE_STATUS_ERROR;
       io_error = TRUE;
     }
 
   /* Данных нет длительное время. */
-  else if (data_timeout > priv->error_timeout)
+  else if (data_timeout > params->error_timeout)
     {
-      g_atomic_int_set (&priv->status, NMEA_DRIVER_STATUS_ERROR);
-      cur_status = NMEA_DRIVER_STATUS_ERROR;
+      g_atomic_int_set (&priv->status, HYSCAN_DEVICE_STATUS_ERROR);
+      cur_status = HYSCAN_DEVICE_STATUS_ERROR;
     }
 
   /* Посылаем предупреждение. */
-  else if (data_timeout > priv->warning_timeout)
+  else if (data_timeout > params->warning_timeout)
     {
       gboolean changed;
       changed = g_atomic_int_compare_and_exchange (&priv->status,
-                                                   NMEA_DRIVER_STATUS_OK,
-                                                   NMEA_DRIVER_STATUS_WARNING);
+                                                   HYSCAN_DEVICE_STATUS_OK,
+                                                   HYSCAN_DEVICE_STATUS_WARNING);
       if (changed)
-        cur_status = NMEA_DRIVER_STATUS_WARNING;
+        cur_status = HYSCAN_DEVICE_STATUS_WARNING;
     }
 
   /* Изменился статус. */
@@ -593,28 +606,29 @@ hyscan_nmea_driver_check_data (HyScanNmeaDriver *driver)
     {
       gchar message[256];
 
-      if (cur_status == NMEA_DRIVER_STATUS_OK)
+      if (cur_status == HYSCAN_DEVICE_STATUS_OK)
         {
           g_snprintf (message, sizeof (message),
-                      _("The sensor is fully operational."));
+                      "The sensor is fully operational.");
         }
-      else if (cur_status == NMEA_DRIVER_STATUS_WARNING)
+      else if (cur_status == HYSCAN_DEVICE_STATUS_WARNING)
         {
           g_snprintf (message, sizeof (message),
-                      _("Temporary error while receiving data."));
+                      "Temporary error while receiving data.");
         }
       else
         {
           g_snprintf (message, sizeof (message),
-                      _("An error occurred while receiving data%s"),
+                      "An error occurred while receiving data%s",
                       io_error ? ", port disconnected." : ".");
+
         }
 
-      g_signal_emit_by_name (driver, "sensor-log",
-                                     priv->name,
-                                     g_get_monotonic_time (),
-                                     HYSCAN_LOG_LEVEL_INFO,
-                                     message);
+      g_signal_emit_by_name (driver, "device-state", params->name);
+      g_signal_emit_by_name (driver, "device-log", params->name,
+                             g_get_monotonic_time (),
+                             HYSCAN_LOG_LEVEL_INFO,
+                             message);
 
       g_atomic_int_set (&priv->prev_status, cur_status);
     }
@@ -667,7 +681,7 @@ hyscan_nmea_driver_emmiter (HyScanNmeaReceiver *receiver,
   g_timer_start (priv->data_timer);
 
   /* Сигнализируем о приёме данных. */
-  g_atomic_int_set (&priv->status, NMEA_DRIVER_STATUS_OK);
+  g_atomic_int_set (&priv->status, HYSCAN_DEVICE_STATUS_OK);
 
   /* Приём данных отключен. */
   if (!g_atomic_int_get (&priv->enable))
@@ -675,7 +689,8 @@ hyscan_nmea_driver_emmiter (HyScanNmeaReceiver *receiver,
 
   /* Отправка всех NMEA данных. */
   hyscan_buffer_wrap_data (priv->buffer, HYSCAN_DATA_STRING, (gpointer)data, size);
-  g_signal_emit_by_name (driver, "sensor-data", priv->name, HYSCAN_SOURCE_NMEA_ANY, time, priv->buffer);
+  g_signal_emit_by_name (driver, "sensor-data", priv->params.name,
+                         HYSCAN_SOURCE_NMEA_ANY, time, priv->buffer);
 
   /* Отправка RMC, GGA и DPT. */
   sentences = g_strsplit_set (data, "\r\n", size);
@@ -697,7 +712,8 @@ hyscan_nmea_driver_emmiter (HyScanNmeaReceiver *receiver,
       if (sentence_type != HYSCAN_SOURCE_INVALID)
         {
           hyscan_buffer_wrap_data (priv->buffer, HYSCAN_DATA_STRING, sentences[i], sentence_length + 1);
-          g_signal_emit_by_name (driver, "sensor-data", priv->name, sentence_type, time, priv->buffer);
+          g_signal_emit_by_name (driver, "sensor-data", priv->params.name,
+                                 sentence_type, time, priv->buffer);
         }
     }
 
@@ -719,53 +735,14 @@ hyscan_nmea_driver_param_get (HyScanParam      *param,
 {
   HyScanNmeaDriver *driver = HYSCAN_NMEA_DRIVER (param);
   HyScanNmeaDriverPrivate *priv = driver->priv;
-
   const gchar * const *params;
-  guint i;
 
   params = hyscan_param_list_params (list);
-  if (params == NULL)
+  if ((params == NULL) || (g_strcmp0 (params[0], priv->status_name) != 0))
     return FALSE;
 
-  for (i = 0; params[i] != NULL; i++)
-    {
-      const gchar *key_id;
+  hyscan_param_list_set_enum (list, priv->status_name, g_atomic_int_get (&priv->status));
 
-      /* Обрабатываем только параметры из ветки /state. */
-      if (!g_str_has_prefix (params[i], priv->state_prefix))
-        return FALSE;
-
-      key_id = params[i] + strlen (priv->state_prefix);
-
-      /* Параметр status. */
-      if (g_strcmp0 (key_id, "status") == 0)
-        {
-          const gchar *status;
-
-          if (g_atomic_int_get (&priv->status) == NMEA_DRIVER_STATUS_OK)
-            status = HYSCAN_DEVICE_SCHEMA_STATUS_OK;
-          else if (g_atomic_int_get (&priv->status) == NMEA_DRIVER_STATUS_WARNING)
-            status = HYSCAN_DEVICE_SCHEMA_STATUS_WARNING;
-          else
-            status = HYSCAN_DEVICE_SCHEMA_STATUS_ERROR;
-
-          hyscan_param_list_set_string (list, params[i], status);
-        }
-
-      /* Неизвестный параметр. */
-      else
-        {
-          return FALSE;
-        }
-    }
-
-  return TRUE;
-}
-
-static gboolean
-hyscan_nmea_driver_sensor_set_sound_velocity (HyScanSensor *sensor,
-                                              GList        *svp)
-{
   return TRUE;
 }
 
@@ -777,7 +754,7 @@ hyscan_nmea_driver_sensor_set_enable (HyScanSensor *sensor,
   HyScanNmeaDriver *driver = HYSCAN_NMEA_DRIVER (sensor);
   HyScanNmeaDriverPrivate *priv = driver->priv;
 
-  if (g_strcmp0 (priv->name, name) != 0)
+  if (g_strcmp0 (priv->params.name, name) != 0)
     return FALSE;
 
   g_atomic_int_set (&priv->enable, enable);
@@ -786,16 +763,11 @@ hyscan_nmea_driver_sensor_set_enable (HyScanSensor *sensor,
 }
 
 static gboolean
-hyscan_nmea_driver_sensor_disconnect (HyScanSensor *sensor)
+hyscan_nmea_driver_device_disconnect (HyScanDevice *sensor)
 {
   HyScanNmeaDriver *driver = HYSCAN_NMEA_DRIVER (sensor);
-  HyScanNmeaDriverPrivate *priv = driver->priv;
 
-  g_atomic_int_set (&priv->shutdown, TRUE);
-  g_clear_pointer (&priv->starter, g_thread_join);
-  g_clear_pointer (&priv->scanner, g_thread_join);
-
-  g_clear_object (&priv->transport);
+  hyscan_nmea_driver_disconnect (driver->priv);
 
   return TRUE;
 }
@@ -822,6 +794,7 @@ hyscan_nmea_driver_new (const gchar     *uri,
 /**
  * hyscan_nmea_driver_get_uart_schema:
  * @uri: путь к датчику
+ * @connect: признак
  *
  * Функция возвращает схему параметров подключения к NMEA датчику.
  *
@@ -829,36 +802,44 @@ hyscan_nmea_driver_new (const gchar     *uri,
  * Для удаления #g_object_unref.
  */
 HyScanDataSchema *
-hyscan_nmea_driver_get_connect_schema (const gchar *uri)
+hyscan_nmea_driver_get_connect_schema (const gchar *uri,
+                                       gboolean     full)
 {
   HyScanDataSchemaBuilder *builder;
   HyScanDataSchema *schema;
-  gchar *URI;
+  gchar *low_uri;
 
-  URI = g_ascii_strdown (uri, -1);
+  low_uri = g_ascii_strdown (uri, -1);
 
-  if (!g_str_has_prefix (URI, HYSCAN_NMEA_DRIVER_UART_URI) &&
-      !g_str_has_prefix (URI, HYSCAN_NMEA_DRIVER_UDP_URI))
+  if (!g_str_has_prefix (low_uri, HYSCAN_NMEA_DRIVER_UART_URI) &&
+      !g_str_has_prefix (low_uri, HYSCAN_NMEA_DRIVER_UDP_URI) &&
+      !full)
     {
-      g_free (URI);
+      g_free (low_uri);
       return NULL;
     }
 
   builder = hyscan_data_schema_builder_new ("params");
 
+  /* Название датчика. */
+  hyscan_data_schema_builder_key_string_create (builder, PARAM_SENSOR_NAME,
+                                                _("Sensor name"), NULL, "nmea");
+
   /* Таймауты приёма данных. */
-  hyscan_data_schema_builder_key_double_create (builder, TIMEOUT_WARNING_PARAM,
-                                                _("Timeout before warning"), NULL, 5.0);
-  hyscan_data_schema_builder_key_double_range  (builder, TIMEOUT_WARNING_PARAM,
+  hyscan_data_schema_builder_key_double_create (builder, PARAM_TIMEOUT_WARNING,
+                                                _("Timeout before warning"), NULL,
+                                                DEFAULT_WARNING_TIMEOUT);
+  hyscan_data_schema_builder_key_double_range  (builder, PARAM_TIMEOUT_WARNING,
                                                 0.0, 30.0, 1.0);
 
-  hyscan_data_schema_builder_key_double_create (builder, TIMEOUT_ERROR_PARAM,
-                                                _("Timeout before error"), NULL, 30.0);
-  hyscan_data_schema_builder_key_double_range  (builder, TIMEOUT_ERROR_PARAM,
+  hyscan_data_schema_builder_key_double_create (builder, PARAM_TIMEOUT_ERROR,
+                                                _("Timeout before error"), NULL,
+                                                DEFAULT_ERROR_TIMEOUT);
+  hyscan_data_schema_builder_key_double_range  (builder, PARAM_TIMEOUT_ERROR,
                                                 30.0, 60.0, 1.0);
 
   /* Параметры UART порта. */
-  if (g_str_has_prefix (URI, HYSCAN_NMEA_DRIVER_UART_URI))
+  if (full || g_str_has_prefix (low_uri, HYSCAN_NMEA_DRIVER_UART_URI))
     {
       GList *devices, *device;
 
@@ -881,7 +862,7 @@ hyscan_nmea_driver_get_connect_schema (const gchar *uri)
         }
       g_list_free_full (devices, (GDestroyNotify)hyscan_nmea_uart_device_free);
 
-      hyscan_data_schema_builder_key_enum_create (builder, UART_PORT_PARAM,
+      hyscan_data_schema_builder_key_enum_create (builder, PARAM_UART_PORT,
                                                   _("Port"), NULL,
                                                   "uart-port", 0);
 
@@ -903,13 +884,13 @@ hyscan_nmea_driver_get_connect_schema (const gchar *uri)
       hyscan_data_schema_builder_enum_value_create (builder, "uart-mode", HYSCAN_NMEA_UART_MODE_115200_8N1,
                                                     _("115200 8N1"), NULL);
 
-      hyscan_data_schema_builder_key_enum_create (builder, UART_MODE_PARAM,
+      hyscan_data_schema_builder_key_enum_create (builder, PARAM_UART_MODE,
                                                   _("Mode"), NULL,
                                                   "uart-mode", HYSCAN_NMEA_UART_MODE_AUTO);
     }
 
   /* Параметры UDP порта. */
-  else if (g_str_has_prefix (URI, HYSCAN_NMEA_DRIVER_UDP_URI))
+  if (full || g_str_has_prefix (low_uri, HYSCAN_NMEA_DRIVER_UDP_URI))
     {
       gchar **addresses;
       guint i;
@@ -930,21 +911,21 @@ hyscan_nmea_driver_get_connect_schema (const gchar *uri)
         }
       g_strfreev (addresses);
 
-      hyscan_data_schema_builder_key_enum_create (builder, UDP_ADDRESS_PARAM,
+      hyscan_data_schema_builder_key_enum_create (builder, PARAM_UDP_ADDRESS,
                                                   _("Address"), NULL,
                                                   "udp-address", 0);
 
       /* UDP/IP порт. */
-      hyscan_data_schema_builder_key_integer_create (builder, UDP_PORT_PARAM,
-                                                     _("UDP port"), NULL, 10000);
-      hyscan_data_schema_builder_key_integer_range  (builder, UDP_PORT_PARAM,
+      hyscan_data_schema_builder_key_integer_create (builder, PARAM_UDP_PORT,
+                                                     _("UDP port"), NULL, DEFAULT_UDP_PORT);
+      hyscan_data_schema_builder_key_integer_range  (builder, PARAM_UDP_PORT,
                                                      1024, 65535, 1);
     }
 
   schema = hyscan_data_schema_builder_get_schema (builder);
 
   g_object_unref (builder);
-  g_free (URI);
+  g_free (low_uri);
 
   return schema;
 }
@@ -968,7 +949,7 @@ hyscan_nmea_driver_check_connect (const gchar     *uri,
   gboolean status = FALSE;
   guint i;
 
-  schema = hyscan_nmea_driver_get_connect_schema (uri);
+  schema = hyscan_nmea_driver_get_connect_schema (uri, FALSE);
   if (schema == NULL)
     goto exit;
 
@@ -1003,9 +984,14 @@ hyscan_nmea_driver_param_interface_init (HyScanParamInterface *iface)
 }
 
 static void
+hyscan_nmea_driver_device_interface_init (HyScanDeviceInterface *iface)
+{
+  iface->set_sound_velocity = NULL;
+  iface->disconnect = hyscan_nmea_driver_device_disconnect;
+}
+
+static void
 hyscan_nmea_driver_sensor_interface_init (HyScanSensorInterface *iface)
 {
-  iface->set_sound_velocity = hyscan_nmea_driver_sensor_set_sound_velocity;
   iface->set_enable = hyscan_nmea_driver_sensor_set_enable;
-  iface->disconnect = hyscan_nmea_driver_sensor_disconnect;
 }

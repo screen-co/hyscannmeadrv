@@ -1,6 +1,6 @@
 /* hyscan-nmea-driver.h
  *
- * Copyright 2018 Screen LLC, Andrei Fadeev <andrei@webcontrol.ru>
+ * Copyright 2018-2019 Screen LLC, Andrei Fadeev <andrei@webcontrol.ru>
  *
  * This file is part of HyScanNMEADrv.
  *
@@ -35,8 +35,7 @@
 #ifndef __HYSCAN_NMEA_DRIVER_H__
 #define __HYSCAN_NMEA_DRIVER_H__
 
-#include <hyscan-param.h>
-#include <hyscan-sensor.h>
+#include <hyscan-data-schema.h>
 #include <hyscan-param-list.h>
 
 G_BEGIN_DECLS
@@ -75,7 +74,8 @@ HyScanNmeaDriver *     hyscan_nmea_driver_new                  (const gchar     
                                                                 HyScanParamList       *params);
 
 HYSCAN_API
-HyScanDataSchema *     hyscan_nmea_driver_get_connect_schema   (const gchar           *uri);
+HyScanDataSchema *     hyscan_nmea_driver_get_connect_schema   (const gchar           *uri,
+                                                                gboolean               full);
 
 HYSCAN_API
 gboolean               hyscan_nmea_driver_check_connect        (const gchar           *uri,
