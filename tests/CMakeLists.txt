@@ -1,6 +1,5 @@
 
 set (TEST_LIBRARIES ${GLIB2_LIBRARIES}
-                    ${LIBXML2_LIBRARIES}
                     ${HYSCAN_LIBRARIES})
 
 add_executable (nmea-uart-test nmea-uart-test.c)

@@ -57,10 +57,8 @@ if (WIN32)
 endif ()
 
 pkg_check_modules (GLIB2 REQUIRED glib-2.0 gobject-2.0 gthread-2.0 gio-2.0)
-pkg_check_modules (LIBXML2 REQUIRED libxml-2.0)
-pkg_check_modules (ZLIB REQUIRED zlib)
-add_definitions (${GLIB2_CFLAGS} ${LIBXML2_CFLAGS} ${ZLIB_CFLAGS})
-link_directories (${GLIB2_LIBRARY_DIRS} ${LIBXML2_LIBRARY_DIRS} ${ZLIB_LIBRARY_DIRS})
+add_definitions (${GLIB2_CFLAGS})
+link_directories (${GLIB2_LIBRARY_DIRS})
 
 if (HYSCAN_USE_SYS_LIBS)
   pkg_check_modules (HYSCAN REQUIRED "hyscantypes-${HYSCAN_MAJOR_VERSION}"

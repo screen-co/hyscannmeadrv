@@ -35,7 +35,6 @@ add_library (${HYSCAN_NMEA_DRV} SHARED
 target_link_libraries (${HYSCAN_NMEA_DRV}
                        ${WIN32_LIBRARIES}
                        ${GLIB2_LIBRARIES}
-                       ${ZLIB_LIBRARIES}
                        ${MATH_LIBRARIES}
                        ${HYSCAN_LIBRARIES})
 
