@@ -846,7 +846,8 @@ hyscan_nmea_driver_get_connect_schema (const gchar *uri,
       /* Список UART портов. */
       hyscan_data_schema_builder_enum_create (builder, "uart-port");
 
-      hyscan_data_schema_builder_enum_value_create (builder, "uart-port", 0,
+      hyscan_data_schema_builder_enum_value_create (builder, "uart-port",
+                                                    0, "auto",
                                                     _("Auto select"), NULL);
 
       device = devices = hyscan_nmea_uart_list_devices ();
@@ -855,7 +856,8 @@ hyscan_nmea_driver_get_connect_schema (const gchar *uri,
           HyScanNmeaUARTDevice *info = device->data;
           guint port_id = g_str_hash (info->path);
 
-          hyscan_data_schema_builder_enum_value_create (builder, "uart-port", port_id,
+          hyscan_data_schema_builder_enum_value_create (builder, "uart-port",
+                                                        port_id, info->name,
                                                         info->name, NULL);
 
           device = g_list_next (device);
@@ -869,19 +871,26 @@ hyscan_nmea_driver_get_connect_schema (const gchar *uri,
       /* Режимы работы UART порта. */
       hyscan_data_schema_builder_enum_create (builder, "uart-mode");
 
-      hyscan_data_schema_builder_enum_value_create (builder, "uart-mode", HYSCAN_NMEA_UART_MODE_AUTO,
+      hyscan_data_schema_builder_enum_value_create (builder, "uart-mode",
+                                                    HYSCAN_NMEA_UART_MODE_AUTO, "auto",
                                                     _("Auto select"), NULL);
-      hyscan_data_schema_builder_enum_value_create (builder, "uart-mode", HYSCAN_NMEA_UART_MODE_4800_8N1,
+      hyscan_data_schema_builder_enum_value_create (builder, "uart-mode",
+                                                    HYSCAN_NMEA_UART_MODE_4800_8N1, "4800-8N1",
                                                     _("4800 8N1"), NULL);
-      hyscan_data_schema_builder_enum_value_create (builder, "uart-mode", HYSCAN_NMEA_UART_MODE_9600_8N1,
+      hyscan_data_schema_builder_enum_value_create (builder, "uart-mode",
+                                                    HYSCAN_NMEA_UART_MODE_9600_8N1, "9600-8N1",
                                                     _("9600 8N1"), NULL);
-      hyscan_data_schema_builder_enum_value_create (builder, "uart-mode", HYSCAN_NMEA_UART_MODE_19200_8N1,
+      hyscan_data_schema_builder_enum_value_create (builder, "uart-mode",
+                                                    HYSCAN_NMEA_UART_MODE_19200_8N1, "19200-8N1",
                                                     _("19200 8N1"), NULL);
-      hyscan_data_schema_builder_enum_value_create (builder, "uart-mode", HYSCAN_NMEA_UART_MODE_38400_8N1,
+      hyscan_data_schema_builder_enum_value_create (builder, "uart-mode",
+                                                    HYSCAN_NMEA_UART_MODE_38400_8N1, "38400-8N1",
                                                     _("38400 8N1"), NULL);
-      hyscan_data_schema_builder_enum_value_create (builder, "uart-mode", HYSCAN_NMEA_UART_MODE_57600_8N1,
+      hyscan_data_schema_builder_enum_value_create (builder, "uart-mode",
+                                                    HYSCAN_NMEA_UART_MODE_57600_8N1, "57600-8N1",
                                                     _("57600 8N1"), NULL);
-      hyscan_data_schema_builder_enum_value_create (builder, "uart-mode", HYSCAN_NMEA_UART_MODE_115200_8N1,
+      hyscan_data_schema_builder_enum_value_create (builder, "uart-mode",
+                                                    HYSCAN_NMEA_UART_MODE_115200_8N1, "115200-8N1",
                                                     _("115200 8N1"), NULL);
 
       hyscan_data_schema_builder_key_enum_create (builder, PARAM_UART_MODE,
@@ -898,7 +907,8 @@ hyscan_nmea_driver_get_connect_schema (const gchar *uri,
       /* Список IP адресов. */
       hyscan_data_schema_builder_enum_create (builder, "udp-address");
 
-      hyscan_data_schema_builder_enum_value_create (builder, "udp-address", 0,
+      hyscan_data_schema_builder_enum_value_create (builder, "udp-address",
+                                                    0, "all",
                                                     _("All addresses"), NULL);
 
       addresses = hyscan_nmea_udp_list_addresses ();
@@ -906,7 +916,8 @@ hyscan_nmea_driver_get_connect_schema (const gchar *uri,
         {
           guint address_id = g_str_hash (addresses[i]);
 
-          hyscan_data_schema_builder_enum_value_create (builder, "udp-address", address_id,
+          hyscan_data_schema_builder_enum_value_create (builder, "udp-address",
+                                                        address_id, addresses[i],
                                                         addresses[i], NULL);
         }
       g_strfreev (addresses);

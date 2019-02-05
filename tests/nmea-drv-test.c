@@ -51,7 +51,7 @@ status_check (gpointer data)
   HyScanParam *param = data;
   HyScanDataSchema *schema = hyscan_param_schema (param);
   HyScanParamList *list = hyscan_param_list_new ();
-  GList *status_enums = hyscan_data_schema_get_enum_values (schema, HYSCAN_DEVICE_STATUS_ENUM);
+  GList *status_enums = hyscan_data_schema_enum_get_values (schema, HYSCAN_DEVICE_STATUS_ENUM);
   const gchar *status_id = "/state/nmea/status";
 
   while (!g_atomic_int_get (&shutdown))
@@ -253,7 +253,7 @@ main (int    argc,
 
               /* Список портов. */
               port_enum_id = hyscan_data_schema_key_get_enum_id (connect, "/uart/port");
-              ports = port = hyscan_data_schema_get_enum_values (connect, port_enum_id);
+              ports = port = hyscan_data_schema_enum_get_values (connect, port_enum_id);
 
               if (ports != NULL)
                 g_print ("  ports:");
@@ -277,7 +277,7 @@ main (int    argc,
 
               /* Список режимов работы. */
               mode_enum_id = hyscan_data_schema_key_get_enum_id (connect, "/uart/mode");
-              modes = mode = hyscan_data_schema_get_enum_values (connect, mode_enum_id);
+              modes = mode = hyscan_data_schema_enum_get_values (connect, mode_enum_id);
 
               if (modes != NULL)
                 g_print ("  modes:");
@@ -308,7 +308,7 @@ main (int    argc,
 
               /* Список адресов. */
               address_enum_id = hyscan_data_schema_key_get_enum_id (connect, "/udp/address");
-              addresses = address = hyscan_data_schema_get_enum_values (connect, address_enum_id);
+              addresses = address = hyscan_data_schema_enum_get_values (connect, address_enum_id);
 
               if (addresses != NULL)
                 g_print ("  addresses:");
@@ -359,7 +359,7 @@ main (int    argc,
 
       /* Ищем идентификатор порта. */
       port_enum_id = hyscan_data_schema_key_get_enum_id (connect, "/uart/port");
-      ports = port = hyscan_data_schema_get_enum_values (connect, port_enum_id);
+      ports = port = hyscan_data_schema_enum_get_values (connect, port_enum_id);
       while (port != NULL)
         {
           HyScanDataSchemaEnumValue *value = port->data;
@@ -373,7 +373,7 @@ main (int    argc,
 
       /* Ищем идентификатор режима работы. */
       mode_enum_id = hyscan_data_schema_key_get_enum_id (connect, "/uart/mode");
-      modes = mode = hyscan_data_schema_get_enum_values (connect, mode_enum_id);
+      modes = mode = hyscan_data_schema_enum_get_values (connect, mode_enum_id);
       while (mode != NULL)
         {
           HyScanDataSchemaEnumValue *value = mode->data;
@@ -394,7 +394,7 @@ main (int    argc,
 
       /* Список адресов. */
       address_enum_id = hyscan_data_schema_key_get_enum_id (connect, "/udp/address");
-      addresses = address = hyscan_data_schema_get_enum_values (connect, address_enum_id);
+      addresses = address = hyscan_data_schema_enum_get_values (connect, address_enum_id);
       while (address != NULL)
         {
           HyScanDataSchemaEnumValue *value = address->data;
