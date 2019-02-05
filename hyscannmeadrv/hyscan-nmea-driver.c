@@ -674,8 +674,6 @@ hyscan_nmea_driver_emmiter (HyScanNmeaReceiver *receiver,
                             HyScanNmeaDriver   *driver)
 {
   HyScanNmeaDriverPrivate *priv = driver->priv;
-  gchar **sentences;
-  guint i;
 
   /* Сбрасываем таймер таймаута данных. */
   g_timer_start (priv->data_timer);
@@ -690,34 +688,7 @@ hyscan_nmea_driver_emmiter (HyScanNmeaReceiver *receiver,
   /* Отправка всех NMEA данных. */
   hyscan_buffer_wrap_data (priv->buffer, HYSCAN_DATA_STRING, (gpointer)data, size);
   g_signal_emit_by_name (driver, "sensor-data", priv->params.name,
-                         HYSCAN_SOURCE_NMEA_ANY, time, priv->buffer);
-
-  /* Отправка RMC, GGA и DPT. */
-  sentences = g_strsplit_set (data, "\r\n", size);
-  for (i = 0; (sentences != NULL) && (sentences[i] != NULL); i++)
-    {
-      HyScanSourceType sentence_type = HYSCAN_SOURCE_INVALID;
-      gsize sentence_length = strlen (sentences[i]);
-
-      if (sentence_length < sizeof ("$XXXXX*CC"))
-        continue;
-
-      if (g_str_has_prefix (sentences[i] + 3, "RMC"))
-        sentence_type = HYSCAN_SOURCE_NMEA_RMC;
-      else if (g_str_has_prefix (sentences[i] + 3, "GGA"))
-        sentence_type = HYSCAN_SOURCE_NMEA_GGA;
-      else if (g_str_has_prefix (sentences[i] + 3, "DPT"))
-        sentence_type = HYSCAN_SOURCE_NMEA_DPT;
-
-      if (sentence_type != HYSCAN_SOURCE_INVALID)
-        {
-          hyscan_buffer_wrap_data (priv->buffer, HYSCAN_DATA_STRING, sentences[i], sentence_length + 1);
-          g_signal_emit_by_name (driver, "sensor-data", priv->params.name,
-                                 sentence_type, time, priv->buffer);
-        }
-    }
-
-  g_strfreev (sentences);
+                         HYSCAN_SOURCE_NMEA, time, priv->buffer);
 }
 
 static HyScanDataSchema *

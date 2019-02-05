@@ -102,7 +102,7 @@ nmea_cb (HyScanDriver *nmea,
   const gchar *str;
   guint32 size;
 
-  if (source != HYSCAN_SOURCE_NMEA_ANY)
+  if (source != HYSCAN_SOURCE_NMEA)
     return;
 
   str = hyscan_buffer_get_data (buffer, &size);
