@@ -147,7 +147,13 @@ hyscan_nmea_discover_connect (HyScanDiscover  *discover,
                               const gchar     *uri,
                               HyScanParamList *params)
 {
-  return HYSCAN_DEVICE (hyscan_nmea_driver_new (uri, params));
+  HyScanNmeaDriver *device;
+
+  device = hyscan_nmea_driver_new (uri, params);
+  if (device != NULL)
+    return HYSCAN_DEVICE (device);
+
+  return NULL;
 }
 
 /**

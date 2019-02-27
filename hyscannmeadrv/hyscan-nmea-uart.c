@@ -435,11 +435,12 @@ hyscan_nmea_uart_receiver (gpointer user_data)
       if (g_atomic_int_get (&priv->configure))
         {
           /* Восстанавливаем режим работы и закрываем устройство. */
-          g_clear_pointer (&priv->device, hyscan_nmea_uart_close);
-          cur_mode = HYSCAN_NMEA_UART_MODE_DISABLED;
+          if (g_atomic_int_compare_and_exchange (&priv->started, TRUE, FALSE))
+            {
+              g_clear_pointer (&priv->device, hyscan_nmea_uart_close);
+              cur_mode = HYSCAN_NMEA_UART_MODE_DISABLED;
+            }
 
-          /* Ждём завершения конфигурации. */
-          g_atomic_int_set (&priv->started, FALSE);
           g_usleep (100000);
           continue;
         }

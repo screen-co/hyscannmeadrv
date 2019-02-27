@@ -211,7 +211,7 @@ hyscan_nmea_driver_set_property (GObject      *object,
   switch (prop_id)
     {
     case PROP_URI:
-      priv->uri = g_ascii_strdown (g_value_get_string (value), -1);
+      priv->uri = g_value_dup_string (value);
       break;
 
     case PROP_PARAMS:
@@ -229,6 +229,9 @@ hyscan_nmea_driver_object_constructed (GObject *object)
 {
   HyScanNmeaDriver *driver = HYSCAN_NMEA_DRIVER (object);
   HyScanNmeaDriverPrivate *priv = driver->priv;
+
+  if (priv->uri == NULL)
+    return;
 
   /* Название датчика. */
   if (priv->params.name == NULL)
@@ -248,7 +251,7 @@ hyscan_nmea_driver_object_constructed (GObject *object)
   priv->buffer = hyscan_buffer_new ();
 
   /* Автоматический выбор UART порта и режима работы. */
-  if ((g_strcmp0 (priv->uri, HYSCAN_NMEA_DRIVER_UART_URI) == 0) &&
+  if ((g_ascii_strcasecmp (priv->uri, HYSCAN_NMEA_DRIVER_UART_URI) == 0) &&
       (priv->params.uart_port == 0))
     {
       priv->scanner = g_thread_new ("uart-scanner", hyscan_nmea_driver_scanner, driver);
@@ -256,7 +259,9 @@ hyscan_nmea_driver_object_constructed (GObject *object)
 
   /* Конкретный UART или UDP порт. */
   else
-    priv->starter = g_thread_new ("uart-starter", hyscan_nmea_driver_starter, driver);
+    {
+      priv->starter = g_thread_new ("uart-starter", hyscan_nmea_driver_starter, driver);
+    }
 
   /* Название параметра статуса. */
   priv->status_name = g_strdup_printf ("/state/%s/status", priv->params.name);
@@ -272,9 +277,9 @@ hyscan_nmea_driver_object_finalize (GObject *object)
   HyScanNmeaDriverPrivate *priv = driver->priv;
 
   hyscan_nmea_driver_disconnect (priv);
-  g_timer_destroy (priv->data_timer);
-  g_object_unref (priv->buffer);
-  g_object_unref (priv->schema);
+  g_clear_pointer (&priv->data_timer, g_timer_destroy);
+  g_clear_object (&priv->buffer);
+  g_clear_object (&priv->schema);
   g_free (priv->status_name);
   g_free (priv->params.name);
   g_free (priv->uri);
@@ -377,7 +382,7 @@ hyscan_nmea_driver_starter (gpointer user_data)
         }
 
       /* Определённый UART порт. */
-      else if (g_strcmp0 (priv->uri, HYSCAN_NMEA_DRIVER_UART_URI) == 0)
+      else if (g_ascii_strcasecmp (priv->uri, HYSCAN_NMEA_DRIVER_UART_URI) == 0)
         {
           HyScanNmeaUART *uart;
           gchar *uart_path = NULL;
@@ -424,7 +429,7 @@ hyscan_nmea_driver_starter (gpointer user_data)
         }
 
       /* Определённый UDP порт. */
-      else if (g_strcmp0 (priv->uri, HYSCAN_NMEA_DRIVER_UDP_URI) == 0)
+      else if (g_ascii_strcasecmp (priv->uri, HYSCAN_NMEA_DRIVER_UDP_URI) == 0)
         {
           HyScanNmeaUDP *udp;
           gchar *address = NULL;
@@ -750,16 +755,23 @@ hyscan_nmea_driver_device_disconnect (HyScanDevice *sensor)
  *
  * Функция создаёт новый объект #HyScanNmeaDriver.
  *
- * Returns: #HyScanNmeaDriver. Для удаления #g_object_unref.
+ * Returns: (nullable): #HyScanNmeaDriver или NULL. Для удаления #g_object_unref.
  */
 HyScanNmeaDriver *
 hyscan_nmea_driver_new (const gchar     *uri,
                         HyScanParamList *params)
 {
-  return g_object_new (HYSCAN_TYPE_NMEA_DRIVER,
-                       "uri", uri,
-                       "params", params,
-                       NULL);
+  HyScanNmeaDriver *driver;
+
+  driver = g_object_new (HYSCAN_TYPE_NMEA_DRIVER,
+                         "uri", uri,
+                         "params", params,
+                         NULL);
+
+  if (driver->priv->schema == NULL)
+    g_clear_object (&driver);
+
+  return driver;
 }
 
 /**
@@ -778,17 +790,9 @@ hyscan_nmea_driver_get_connect_schema (const gchar *uri,
 {
   HyScanDataSchemaBuilder *builder;
   HyScanDataSchema *schema;
-  gchar *low_uri;
 
-  low_uri = g_ascii_strdown (uri, -1);
-
-  if (!g_str_has_prefix (low_uri, HYSCAN_NMEA_DRIVER_UART_URI) &&
-      !g_str_has_prefix (low_uri, HYSCAN_NMEA_DRIVER_UDP_URI) &&
-      !full)
-    {
-      g_free (low_uri);
-      return NULL;
-    }
+  if ((uri == NULL) && !full)
+    return NULL;
 
   builder = hyscan_data_schema_builder_new ("params");
 
@@ -810,7 +814,7 @@ hyscan_nmea_driver_get_connect_schema (const gchar *uri,
                                                 30.0, 60.0, 1.0);
 
   /* Параметры UART порта. */
-  if (full || g_str_has_prefix (low_uri, HYSCAN_NMEA_DRIVER_UART_URI))
+  if (full || (g_ascii_strcasecmp (uri, HYSCAN_NMEA_DRIVER_UART_URI) == 0))
     {
       GList *devices, *device;
 
@@ -870,7 +874,7 @@ hyscan_nmea_driver_get_connect_schema (const gchar *uri,
     }
 
   /* Параметры UDP порта. */
-  if (full || g_str_has_prefix (low_uri, HYSCAN_NMEA_DRIVER_UDP_URI))
+  if (full || (g_ascii_strcasecmp (uri, HYSCAN_NMEA_DRIVER_UDP_URI) == 0))
     {
       gchar **addresses;
       guint i;
@@ -907,7 +911,6 @@ hyscan_nmea_driver_get_connect_schema (const gchar *uri,
   schema = hyscan_data_schema_builder_get_schema (builder);
 
   g_object_unref (builder);
-  g_free (low_uri);
 
   return schema;
 }
