@@ -237,9 +237,6 @@ hyscan_nmea_driver_object_constructed (GObject *object)
   if (priv->params.name == NULL)
     priv->params.name = g_strdup ("nmea");
 
-  /* По умолчанию приём данных включен. */
-  priv->enable = TRUE;
-
   /* Начальный статус. */
   priv->status = HYSCAN_DEVICE_STATUS_ERROR;
   priv->prev_status = HYSCAN_DEVICE_STATUS_ERROR;
