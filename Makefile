@@ -19,6 +19,7 @@ release:
 	@cd build && cmake -G $(CMAKE_GENERATOR) \
                        -D CMAKE_BUILD_TYPE=Release \
                        -D CMAKE_INSTALL_PREFIX=$(PREFIX) \
+                       -D HYSCAN_USE_SYS_LIBS=$(USE_SYS_LIBS) \
                        ..
 	@$(MAKE) -C build
 
@@ -28,12 +29,21 @@ debug:
 	@cd build && cmake -G $(CMAKE_GENERATOR) \
                        -D CMAKE_BUILD_TYPE=Debug \
                        -D CMAKE_INSTALL_PREFIX=$(PREFIX) \
+                       -D HYSCAN_USE_SYS_LIBS=$(USE_SYS_LIBS) \
                        ..
 	@$(MAKE) -C build
 
-install: release
+install: install-runtime
+
+install-all: release
 	@echo "Performing installation"
 	@cd build && cmake -D CMAKE_INSTALL_DO_STRIP=YES \
+                       -P cmake_install.cmake
+
+install-runtime: release
+	@echo "Performing runtime installation"
+	@cd build && cmake -D COMPONENT=runtime \
+                       -D CMAKE_INSTALL_DO_STRIP=YES \
                        -P cmake_install.cmake
 
 clean:
