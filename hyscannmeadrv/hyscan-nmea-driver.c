@@ -56,6 +56,7 @@
 #include "hyscan-nmea-driver.h"
 #include "hyscan-nmea-uart.h"
 #include "hyscan-nmea-udp.h"
+#include "hyscan-nmea-drv.h"
 
 #include <hyscan-param-controller.h>
 #include <hyscan-sensor-schema.h>
@@ -75,6 +76,12 @@
 #define DEFAULT_WARNING_TIMEOUT    5.0
 #define DEFAULT_ERROR_TIMEOUT      30.0
 #define DEFAULT_UDP_PORT           10000
+
+#define NMEA_INFO_NAME(...)        hyscan_param_name_constructor (key_id, \
+                                     (guint)sizeof (key_id), "info", __VA_ARGS__)
+
+#define NMEA_STATE_NAME(...)       hyscan_param_name_constructor (key_id, \
+                                     (guint)sizeof (key_id), "state", __VA_ARGS__)
 
 enum
 {
@@ -133,7 +140,7 @@ static void      hyscan_nmea_driver_parse_connect_params   (HyScanParamList     
                                                             HyScanNmeaDriverParams  *params);
 
 static HyScanDataSchema *
-                 hyscan_nmea_driver_create_schema          (const gchar             *name);
+                 hyscan_nmea_driver_create_schema          (const gchar             *dev_id);
 
 static void      hyscan_nmea_driver_disconnect             (HyScanNmeaDriverPrivate *priv);
 
@@ -321,27 +328,60 @@ hyscan_nmea_driver_parse_connect_params (HyScanParamList        *list,
 
 /* Функция создаёт схему датчика. */
 static HyScanDataSchema *
-hyscan_nmea_driver_create_schema (const gchar *name)
+hyscan_nmea_driver_create_schema (const gchar *dev_id)
 {
   HyScanDataSchemaBuilder *builder;
   HyScanDeviceSchema *device;
   HyScanSensorSchema *sensor;
   HyScanDataSchema *schema;
-  gchar *key_id;
+  gchar key_id[128];
 
   device = hyscan_device_schema_new (HYSCAN_DEVICE_SCHEMA_VERSION);
   sensor = hyscan_sensor_schema_new (device);
   builder = HYSCAN_DATA_SCHEMA_BUILDER (device);
 
   /* Описание датчика. */
-  hyscan_sensor_schema_add_sensor (sensor, name, name, _("NMEA sensor"));
+  hyscan_sensor_schema_add_sensor (sensor, dev_id, dev_id, _("NMEA sensor"));
+
+  /* Информация о датчике. */
+
+  /* Название устройства. */
+  NMEA_INFO_NAME (dev_id, NULL);
+  hyscan_data_schema_builder_node_set_name     (builder, key_id, "Nmea", dev_id);
+
+  /* Название датчика. */
+  NMEA_INFO_NAME (dev_id, "name", NULL);
+  hyscan_data_schema_builder_key_string_create (builder, key_id,
+                                                _("Name"), _("Sensor name"),
+                                                dev_id);
+  hyscan_data_schema_builder_key_set_access    (builder, key_id, HYSCAN_DATA_SCHEMA_ACCESS_READ);
+
+  /* Версия драйвера. */
+  NMEA_INFO_NAME (dev_id, "drv", NULL);
+  hyscan_data_schema_builder_key_string_create (builder, key_id,
+                                                _("Driver"), _("Driver"),
+                                                "Nmea");
+  hyscan_data_schema_builder_key_set_access    (builder, key_id, HYSCAN_DATA_SCHEMA_ACCESS_READ);
+
+  /* Версия драйвера. */
+  NMEA_INFO_NAME (dev_id, "drv-version", NULL);
+  hyscan_data_schema_builder_key_string_create (builder, key_id,
+                                                _("Driver version"), _("Driver version"),
+                                                HYSCAN_NMEA_DRIVER_VERSION);
+  hyscan_data_schema_builder_key_set_access    (builder, key_id, HYSCAN_DATA_SCHEMA_ACCESS_READ);
+
+  /* Версия драйвера. */
+  NMEA_INFO_NAME (dev_id, "drv-build-id", NULL);
+  hyscan_data_schema_builder_key_string_create (builder, key_id,
+                                                _("Driver build id"), _("Driver build id"),
+                                                HYSCAN_NMEA_DRIVER_BUILD_ID);
+  hyscan_data_schema_builder_key_set_access    (builder, key_id, HYSCAN_DATA_SCHEMA_ACCESS_READ);
 
   /* Статус работы датчика. */
-  key_id = g_strdup_printf ("/state/%s/status", name);
+  NMEA_STATE_NAME (dev_id, "status", NULL);
   hyscan_data_schema_builder_key_enum_create (builder, key_id, "Status", NULL,
                                               HYSCAN_DEVICE_STATUS_ENUM, HYSCAN_DEVICE_STATUS_ERROR);
   hyscan_data_schema_builder_key_set_access (builder, key_id, HYSCAN_DATA_SCHEMA_ACCESS_READ);
-  g_free (key_id);
 
   schema = hyscan_data_schema_builder_get_schema (builder);
 
