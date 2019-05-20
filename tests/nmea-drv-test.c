@@ -105,7 +105,7 @@ nmea_cb (HyScanDriver *nmea,
   if (source != HYSCAN_SOURCE_NMEA)
     return;
 
-  str = hyscan_buffer_get_data (buffer, &size);
+  str = hyscan_buffer_get (buffer, NULL, &size);
   g_print ("Data from %s\n%s\n", name, str);
 }
 

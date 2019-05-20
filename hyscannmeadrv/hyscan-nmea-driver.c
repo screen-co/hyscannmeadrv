@@ -728,7 +728,7 @@ hyscan_nmea_driver_emmiter (HyScanNmeaReceiver *receiver,
     return;
 
   /* Отправка всех NMEA данных. */
-  hyscan_buffer_wrap_data (priv->buffer, HYSCAN_DATA_STRING, (gpointer)data, size);
+  hyscan_buffer_wrap (priv->buffer, HYSCAN_DATA_STRING, (gpointer)data, size);
   g_signal_emit_by_name (driver, "sensor-data", priv->params.dev_id,
                          HYSCAN_SOURCE_NMEA, time, priv->buffer);
 }
