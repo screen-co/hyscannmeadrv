@@ -59,7 +59,8 @@
 #include "hyscan-nmea-drv.h"
 
 #include <hyscan-param-controller.h>
-#include <hyscan-sensor-schema.h>
+#include <hyscan-device-driver.h>
+#include <hyscan-sensor-driver.h>
 #include <hyscan-buffer.h>
 
 #include <glib/gi18n-lib.h>
@@ -666,11 +667,11 @@ hyscan_nmea_driver_check_data (HyScanNmeaDriver *driver)
 
         }
 
-      g_signal_emit_by_name (driver, "device-state", params->dev_id);
-      g_signal_emit_by_name (driver, "device-log", params->dev_id,
-                             g_get_monotonic_time (),
-                             HYSCAN_LOG_LEVEL_INFO,
-                             message);
+      hyscan_device_driver_send_state (driver, params->dev_id);
+      hyscan_device_driver_send_log (driver, params->dev_id,
+                                     g_get_monotonic_time (),
+                                     HYSCAN_LOG_LEVEL_INFO,
+                                     message);
 
       g_atomic_int_set (&priv->prev_status, cur_status);
     }
@@ -729,8 +730,8 @@ hyscan_nmea_driver_emmiter (HyScanNmeaReceiver *receiver,
 
   /* Отправка всех NMEA данных. */
   hyscan_buffer_wrap (priv->buffer, HYSCAN_DATA_STRING, (gpointer)data, size);
-  g_signal_emit_by_name (driver, "sensor-data", priv->params.dev_id,
-                         HYSCAN_SOURCE_NMEA, time, priv->buffer);
+  hyscan_sensor_driver_send_data (driver, priv->params.dev_id,
+                                  HYSCAN_SOURCE_NMEA, time, priv->buffer);
 }
 
 static HyScanDataSchema *
