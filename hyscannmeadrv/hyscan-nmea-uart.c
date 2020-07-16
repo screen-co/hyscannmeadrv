@@ -721,7 +721,7 @@ hyscan_nmea_uart_list_devices (void)
         }
 
       port = g_slice_new (HyScanNmeaUARTDevice);
-      port->path = g_strdup_printf ("%s:", port_path);
+      port->path = g_strdup_printf ("\\\\.\\%s", port_path);
 
       if (is_usb)
         port->name = g_strdup_printf("USB%s", port_path);
