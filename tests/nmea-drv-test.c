@@ -33,10 +33,10 @@
  */
 
 #include <hyscan-nmea-driver.h>
-#include <hyscan-driver.h>
 #include <hyscan-device-schema.h>
 #include <hyscan-param.h>
 #include <hyscan-sensor.h>
+#include <hyscan-driver.h>
 #include <hyscan-buffer.h>
 
 #include <stdio.h>
@@ -52,11 +52,10 @@ status_check (gpointer data)
   HyScanDataSchema *schema = hyscan_param_schema (param);
   HyScanParamList *list = hyscan_param_list_new ();
   GList *status_enums = hyscan_data_schema_enum_get_values (schema, HYSCAN_DEVICE_STATUS_ENUM);
-  const gchar *status_id = "/state/nmea/status";
+  const gchar *status_id = "/state/"HYSCAN_NMEA_DRIVER_DEFAULT_DEV_ID"/status";
 
   while (!g_atomic_int_get (&shutdown))
     {
-
       hyscan_param_list_clear (list);
       hyscan_param_list_add (list, status_id);
       if (hyscan_param_get (param, list))
@@ -418,6 +417,9 @@ main (int    argc,
   nmea = hyscan_discover_connect (HYSCAN_DISCOVER (driver), uri, params);
   g_signal_connect (nmea, "sensor-data", G_CALLBACK (nmea_cb), NULL);
   g_signal_connect (nmea, "device-log", G_CALLBACK (log_cb), NULL);
+
+  /* Включаем датчик. */
+  hyscan_sensor_set_enable (HYSCAN_SENSOR (nmea), HYSCAN_NMEA_DRIVER_DEFAULT_DEV_ID, TRUE);
 
   status_thread = g_thread_new ("status", status_check, nmea);
 

@@ -74,7 +74,6 @@
 #define PARAM_UDP_ADDRESS          "/udp/address"
 #define PARAM_UDP_PORT             "/udp/port"
 
-#define DEFAULT_DEV_ID             "gnss-nmea"
 #define DEFAULT_WARNING_TIMEOUT    5.0
 #define DEFAULT_ERROR_TIMEOUT      30.0
 #define DEFAULT_UDP_PORT           10000
@@ -244,7 +243,7 @@ hyscan_nmea_driver_object_constructed (GObject *object)
 
   /* Идентификатор датчика. */
   if (priv->params.dev_id == NULL)
-    priv->params.dev_id = g_strdup (DEFAULT_DEV_ID);
+    priv->params.dev_id = g_strdup (HYSCAN_NMEA_DRIVER_DEFAULT_DEV_ID);
 
   /* Начальный статус. */
   priv->status = HYSCAN_DEVICE_STATUS_ERROR;
@@ -837,7 +836,8 @@ hyscan_nmea_driver_get_connect_schema (const gchar *uri,
 
   /* Идентификатор устройства. */
   hyscan_data_schema_builder_key_string_create (builder, PARAM_DEVICE_ID,
-                                                _("Device id"), NULL, DEFAULT_DEV_ID);
+                                                _("Device id"), NULL,
+                                                HYSCAN_NMEA_DRIVER_DEFAULT_DEV_ID);
 
   /* Таймауты приёма данных. */
   hyscan_data_schema_builder_key_double_create (builder, PARAM_TIMEOUT_WARNING,
