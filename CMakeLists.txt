@@ -9,6 +9,7 @@ set (HYSCAN_NMEA_DRV "hyscan-nmea")
 string (RANDOM LENGTH 8 ALPHABET "0123456789ABCEDF" HYSCAN_NMEA_BUILD_ID)
 
 include (FindPkgConfig)
+include (GNUInstallDirs)
 
 if (NOT CMAKE_BUILD_TYPE)
   set (CMAKE_BUILD_TYPE Release)
@@ -78,6 +79,16 @@ else ()
 endif ()
 
 include_directories ("${CMAKE_CURRENT_SOURCE_DIR}/hyscannmeadrv")
+
+if (NOT HYSCAN_INSTALLED)
+  set (CMAKE_INSTALL_RPATH "../${CMAKE_INSTALL_LIBDIR}")
+endif ()
+
+if (HYSCAN_INSTALLED AND UNIX)
+  set (HYSCAN_INSTALL_DRVDIR "${CMAKE_INSTALL_LIBDIR}/hyscan${HYSCAN_MAJOR_VERSION}/drivers")
+else ()
+  set (HYSCAN_INSTALL_DRVDIR "${CMAKE_INSTALL_BINDIR}")
+endif ()
 
 add_definitions (-DG_LOG_DOMAIN="HyScanNMEADrv")
 add_definitions (-DGETTEXT_PACKAGE="hyscan-nmea-drv")
