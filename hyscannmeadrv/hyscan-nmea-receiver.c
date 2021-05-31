@@ -361,6 +361,7 @@ hyscan_nmea_receiver_add_data (HyScanNmeaReceiver *receiver,
           gboolean bad_crc = FALSE;
           guchar nmea_crc1 = 0;
           guint nmea_crc2 = 255;
+          gint nmea_time = -1;
           guint i;
 
           /* NMEA строка не может быть короче 10 символов. */
@@ -398,7 +399,7 @@ hyscan_nmea_receiver_add_data (HyScanNmeaReceiver *receiver,
                g_str_has_prefix (priv->string + 3, "BWC") ||
                g_str_has_prefix (priv->string + 3, "ZDA")) && !bad_crc)
             {
-              gint nmea_time, hour, min, sec, msec;
+              gint hour, min, sec, msec;
               gint n_fields;
 
               /* Смещение до поля со временем во всех этих строках равно 7. */
@@ -409,8 +410,20 @@ hyscan_nmea_receiver_add_data (HyScanNmeaReceiver *receiver,
                 nmea_time = 1000 * (3600 * hour + 60 * min + sec) + msec;
               else
                 nmea_time = 0;
+            }
 
-              /* Если текущее время и время блока различаются, отправляем блок данных. */
+          /* NMEA строки HyScan/Hydra. */
+          if ((g_str_has_prefix (priv->string + 3, "ACP") ||
+               g_str_has_prefix (priv->string + 3, "PTF") ||
+               g_str_has_prefix (priv->string + 3, "PTQ")) && !bad_crc)
+            {
+              if (sscanf (priv->string + 7,"%d", &nmea_time) != 1)
+                nmea_time = 0;
+            }
+
+          /* Если текущее время и время блока различаются, отправляем блок данных. */
+          if (nmea_time >= 0)
+            {
               if ((priv->nmea_time > 0) && (priv->nmea_time != nmea_time))
                 send_block = TRUE;
 
